@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Analysis Board</title>
+
+<link rel="stylesheet" href="./vendor/chessground.base.css">
+<link rel="stylesheet" href="./vendor/chessground.cburnett.css">
+
+<!-- PWA -->
+<link rel="manifest" href="./manifest.json">
+<meta name="theme-color" content="#15201e">
+<link rel="apple-touch-icon" href="./icons/icon.svg">
+<link rel="stylesheet" href="./vendor/fonts/fonts.css">
+
+<style>
+  :root{
+    --bg:#15201e; --bg2:#1b2826; --panel:#21302d; --panel-hi:#273935;
+    --line:rgba(255,255,255,.08);
+    --ink:#ecece4; --ink-dim:#9bb0aa;
+    --gold:#e0b15a; --green:#7bbd5b; --red:#e08a78;
+    --sq-light:#d9cdb4; --sq-dark:#465863;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    background:radial-gradient(120% 90% at 50% -10%, #1c2c29 0%, var(--bg) 55%);
+    color:var(--ink); font-family:"Instrument Sans",system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased; min-height:100%; padding:14px 12px 26px;
+    display:flex; flex-direction:column; align-items:center;
+  }
+  .wrap{width:100%;max-width:440px;}
+  header{display:flex;align-items:center;gap:9px;margin-bottom:12px;}
+  header .dot{width:30px;height:30px;border-radius:8px;background:linear-gradient(150deg,var(--gold),#b9863a);display:grid;place-items:center;color:#1a1408;font-size:16px;}
+  header h1{font-family:"Fraunces",serif;font-weight:600;font-size:18px;}
+
+  .frame{background:var(--bg2);padding:9px;border-radius:14px;border:1px solid var(--line);box-shadow:0 14px 40px rgba(0,0,0,.4);}
+  .board{width:min(90vw,420px);height:min(90vw,420px);border-radius:6px;overflow:hidden;}
+  cg-board{
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='2' height='2'%3E%3Crect width='2' height='2' fill='%23d9cdb4'/%3E%3Crect width='1' height='1' fill='%23465863'/%3E%3Crect x='1' y='1' width='1' height='1' fill='%23465863'/%3E%3C/svg%3E");
+    background-size:25% 25%;background-repeat:repeat;
+  }
+  cg-board square.last-move{background:rgba(224,177,90,.30);}
+  cg-board square.selected{background:rgba(224,177,90,.45);}
+
+  /* turn + actions */
+  .row{display:flex;gap:8px;align-items:center;margin-top:11px;flex-wrap:wrap;}
+  .seg{display:flex;gap:4px;background:var(--bg2);border:1px solid var(--line);border-radius:9px;padding:3px;}
+  .seg button{background:none;border:none;color:var(--ink-dim);font-family:inherit;font-size:12.5px;font-weight:600;padding:7px 12px;border-radius:6px;cursor:pointer;transition:all .15s;}
+  .seg button.sel{background:var(--panel-hi);color:var(--ink);}
+  .lbl{font-size:11px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-dim);}
+
+  .btn{background:var(--bg2);border:1px solid var(--line);color:var(--ink);border-radius:9px;padding:8px 12px;font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer;transition:all .15s;}
+  .btn:hover{border-color:rgba(255,255,255,.22);}
+  .btn.gold{background:linear-gradient(150deg,var(--gold),#c8923f);color:#1a1408;border:none;}
+  .btn.on{border-color:var(--gold);color:var(--gold);background:rgba(224,177,90,.18);box-shadow:0 0 0 2px rgba(224,177,90,.45) inset;}
+  /* Best move — the primary action here */
+  .btn.primary{width:100%;margin-top:14px;padding:15px;font-size:16px;border-radius:13px;
+    box-shadow:0 8px 22px rgba(224,177,90,.22);transition:transform .15s,box-shadow .2s;}
+  .btn.primary:hover{transform:translateY(-1px);box-shadow:0 12px 28px rgba(224,177,90,.3);}
+
+  /* piece bank */
+  .bank{margin-top:12px;background:var(--bg2);border:1px solid var(--line);border-radius:12px;padding:10px;}
+  .bank .lbl{display:block;margin-bottom:8px;}
+  .bankrow{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;margin-bottom:6px;}
+  .bankrow:last-child{margin-bottom:0;}
+  .pc{aspect-ratio:1;border:1px solid var(--line);border-radius:8px;background:#2a3a36;cursor:pointer;transition:all .14s;display:grid;place-items:center;}
+  .pc:hover{border-color:rgba(255,255,255,.25);}
+  .pc.sel{border-color:var(--gold);box-shadow:0 0 0 2px rgba(224,177,90,.35) inset;background-color:#33453f;}
+  .pc.glyph{font-size:24px;line-height:1;user-select:none;}
+  .pc.glyph.w{color:#f6f2e8;text-shadow:0 1px 0 rgba(0,0,0,.4),0 0 1px rgba(0,0,0,.7);}
+  .pc.glyph.b{color:#11171a;text-shadow:0 1px 0 rgba(255,255,255,.18);}
+  .pc.eraser{color:var(--ink-dim);font-size:20px;}
+  .pc.eraser.sel{color:var(--gold);}
+
+  .hint{margin-top:10px;font-size:12px;color:var(--ink-dim);line-height:1.5;}
+  .result{margin-top:10px;min-height:22px;font-size:14px;font-weight:600;}
+  .result.ok{color:var(--green);} .result.bad{color:var(--red);} .result.move{color:var(--gold);font-family:"JetBrains Mono",monospace;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header><div class="dot">&#9683;</div><h1>Analysis Board</h1><button class="btn" type="button" style="margin-left:auto" onclick="window.location.href='index.html'">&#8592; Back to game</button></header>
+
+  <div class="frame"><div class="board" id="board"></div></div>
+
+  <div class="row">
+    <span class="lbl">To move</span>
+    <div class="seg" id="turnSeg">
+      <button data-t="w" class="sel">White</button>
+      <button data-t="b">Black</button>
+    </div>
+  </div>
+
+  <div class="row">
+    <button class="btn" id="startBtn">Start position</button>
+    <button class="btn" id="clearBtn">Clear</button>
+    <button class="btn" id="eraseBtn" title="Eraser — tap, then tap squares to remove">&#9003; Erase</button>
+  </div>
+
+  <div class="bank">
+    <span class="lbl">Pieces — tap one, then tap a square to place</span>
+    <div class="bankrow" id="whiteBank"></div>
+    <div class="bankrow" id="blackBank"></div>
+  </div>
+
+  <button class="btn gold primary" id="askBtn">Best move &#9826;</button>
+
+  <div class="result" id="result"></div>
+  <div class="hint">Tap a piece then a square to place it. Tap the eraser then a square to remove. Drag a piece on the board to move it. Build any legal position, choose who moves, then ask for the best move.</div>
+</div>
+
+<script type="module">
+  import { Chessground } from './vendor/chessground.min.js';
+  import { Chess } from './vendor/chess.js';
+
+  /* ---------- engine (same local Stockfish file as the main app) ---------- */
+  const SF_ENGINE = 'stockfish-18-lite-single.js';
+  let engine=null, engineReady=false, engineDead=false, pendingResolve=null, reqId=0;
+  function startEngine(){
+    try{ engine=new Worker(SF_ENGINE); }catch(e){ engineDead=true; return; }
+    engine.onmessage=(e)=>{
+      const line=typeof e.data==='string'?e.data:(e.data&&e.data.data)||'';
+      if(line==='uciok'){ engine.postMessage('setoption name MultiPV value 1'); engine.postMessage('isready'); }
+      else if(line==='readyok'){ engineReady=true; }
+      else if(line.startsWith('bestmove')){
+        const uci=line.split(' ')[1];
+        if(pendingResolve){ const r=pendingResolve; pendingResolve=null; r(uci); }
+      }
+    };
+    engine.onerror=()=>{ engineDead=true; };
+    engine.postMessage('uci');
+    setTimeout(()=>{ if(!engineReady) engineDead=true; }, 12000);
+  }
+  startEngine();
+  function bestMove(fen){
+    return new Promise((resolve)=>{ pendingResolve=resolve; engine.postMessage('position fen '+fen); engine.postMessage('go depth 16'); });
+  }
+
+  /* ---------- board state (authoritative) ---------- */
+  const ROLE2CHAR={king:'k',queen:'q',rook:'r',bishop:'b',knight:'n',pawn:'p'};
+  let pieces=new Map();   // key 'e1' -> {role,color}
+  let turn='w';
+  let brush=null;         // {role,color} | 'eraser' | null
+
+  function startPieces(){
+    const m=new Map();
+    const back=['rook','knight','bishop','queen','king','bishop','knight','rook'];
+    for(let f=0;f<8;f++){ const file=String.fromCharCode(97+f);
+      m.set(file+'1',{role:back[f],color:'white'}); m.set(file+'2',{role:'pawn',color:'white'});
+      m.set(file+'7',{role:'pawn',color:'black'}); m.set(file+'8',{role:back[f],color:'black'}); }
+    return m;
+  }
+  function piecesToCgMap(){ const m=new Map(); for(const [k,p] of pieces) m.set(k,{role:p.role,color:p.color}); return m; }
+  function boardFen(){
+    let fen='';
+    for(let r=8;r>=1;r--){ let empty=0,row='';
+      for(let f=0;f<8;f++){ const k=String.fromCharCode(97+f)+r; const p=pieces.get(k);
+        if(!p){empty++;continue;} if(empty){row+=empty;empty=0;}
+        const ch=ROLE2CHAR[p.role]; row += p.color==='white'?ch.toUpperCase():ch; }
+      if(empty) row+=empty; fen+=row+(r>1?'/':''); }
+    return fen;
+  }
+
+  const board=document.getElementById('board');
+  const cg=Chessground(board,{
+    movable:{ free:true, color:'both', showDests:false },
+    draggable:{ enabled:true, deleteOnDropOff:true },
+    selectable:{ enabled:true },
+    drawable:{ enabled:true, visible:true },
+    events:{
+      move:(orig,dest)=>{ const p=pieces.get(orig); pieces.delete(orig); if(p) pieces.set(dest,p); clearArrow(); render(); },
+      select:(key)=>{
+        if(brush==='eraser'){ pieces.delete(key); clearArrow(); render(); }
+        else if(brush){
+          pieces.set(key,{role:brush.role,color:brush.color});
+          clearBrushSelection();        // placing once de-selects, so taps don't keep dropping pieces
+          clearArrow(); render();
+        }
+      }
+    }
+  });
+
+  let arrow=null;
+  function clearArrow(){ arrow=null; setResult('',''); }
+  function render(){
+    cg.set({ fen: boardFen() });
+    cg.setShapes(arrow ? [arrow] : []);
+  }
+
+  /* ---------- piece bank (unicode glyphs — always render) ---------- */
+  const GLYPH={ king:'\u265A', queen:'\u265B', rook:'\u265C', bishop:'\u265D', knight:'\u265E', pawn:'\u265F' };
+  const order=['king','queen','rook','bishop','knight','pawn'];
+  function buildBank(){
+    const wb=document.getElementById('whiteBank'), bb=document.getElementById('blackBank');
+    function make(color, role){
+      const d=document.createElement('div'); d.className='pc glyph '+(color==='white'?'w':'b');
+      d.textContent=GLYPH[role]; d.title=color+' '+role;
+      d.addEventListener('click',()=>selectBrush(d,{role,color}));
+      return d;
+    }
+    order.forEach(r=> wb.appendChild(make('white',r)));
+    order.forEach(r=> bb.appendChild(make('black',r)));
+  }
+  function selectBrush(el, val){
+    const wasSel = el.classList.contains('sel');
+    document.querySelectorAll('.bank .pc').forEach(p=>p.classList.remove('sel'));
+    document.getElementById('eraseBtn').classList.remove('on');
+    if(wasSel){ brush=null; return; }   // tap again to deselect
+    el.classList.add('sel'); brush=val;
+  }
+  function clearBrushSelection(){
+    brush=null;
+    document.querySelectorAll('.bank .pc').forEach(p=>p.classList.remove('sel'));
+    document.getElementById('eraseBtn').classList.remove('on');
+  }
+  // eraser mode: tap button to toggle, then tap squares to remove
+  document.getElementById('eraseBtn').addEventListener('click',()=>{
+    const btn=document.getElementById('eraseBtn');
+    const on = brush==='eraser';
+    clearBrushSelection();
+    if(!on){ brush='eraser'; btn.classList.add('on'); }
+  });
+
+  /* ---------- turn + actions ---------- */
+  document.querySelectorAll('#turnSeg button').forEach(b=>b.addEventListener('click',()=>{
+    document.querySelectorAll('#turnSeg button').forEach(x=>x.classList.remove('sel'));
+    b.classList.add('sel'); turn=b.dataset.t; clearArrow();
+  }));
+  document.getElementById('startBtn').addEventListener('click',()=>{ pieces=startPieces(); clearArrow(); render(); });
+  document.getElementById('clearBtn').addEventListener('click',()=>{ pieces=new Map(); clearArrow(); render(); });
+
+  function setResult(text, cls){ const r=document.getElementById('result'); r.textContent=text; r.className='result'+(cls?(' '+cls):''); }
+
+  /* ---------- legality + best move ---------- */
+  function flip(fen){ const p=fen.split(' '); p[1]=p[1]==='w'?'b':'w'; p[3]='-'; return p.join(' '); }
+  function validate(){
+    const bf=boardFen();
+    const wk=(bf.match(/K/g)||[]).length, bk=(bf.match(/k/g)||[]).length;
+    if(wk!==1) return {ok:false,msg:'Need exactly one white king.'};
+    if(bk!==1) return {ok:false,msg:'Need exactly one black king.'};
+    const ranks=bf.split('/');
+    if(/[pP]/.test(ranks[0])||/[pP]/.test(ranks[7])) return {ok:false,msg:'Pawns can’t be on the back ranks.'};
+    const full=bf+' '+turn+' - - 0 1';
+    let fl; try{ fl=new Chess(flip(full)); }catch(e){ return {ok:false,msg:'Illegal position.'}; }
+    if(fl.isCheck()) return {ok:false,msg:'Side not to move is in check — illegal.'};
+    try{ new Chess(full); }catch(e){ return {ok:false,msg:'Illegal position.'}; }
+    return {ok:true,fen:full};
+  }
+
+  document.getElementById('askBtn').addEventListener('click', async ()=>{
+    clearArrow();
+    const v=validate();
+    if(!v.ok){ setResult(v.msg,'bad'); return; }
+    if(engineDead){ setResult('Engine not loaded — serve the files locally.','bad'); return; }
+    if(!engineReady){ setResult('Engine loading…',''); const t0=Date.now(); while(!engineReady&&!engineDead&&Date.now()-t0<12000) await new Promise(r=>setTimeout(r,150)); if(!engineReady){ setResult('Engine not ready.','bad'); return; } }
+    setResult('Thinking…','');
+    let uci; try{ uci=await bestMove(v.fen); }catch(e){ uci=null; }
+    if(!uci || uci==='(none)'){ setResult('No move (mate/stalemate?).','bad'); return; }
+    const from=uci.slice(0,2), to=uci.slice(2,4), promo=uci.length>4?uci[4]:null;
+    // show the arrow briefly, then play it on the board
+    arrow={ orig:from, dest:to, brush:'green' };
+    render();
+    setResult('Best move: '+from+'→'+to,'move');
+    setTimeout(()=>{
+      const p=pieces.get(from); if(!p) return;
+      pieces.delete(from);
+      if(promo){ p.role={q:'queen',r:'rook',b:'bishop',n:'knight'}[promo]||p.role; }
+      pieces.set(to,p);
+      turn = turn==='w'?'b':'w';
+      document.querySelectorAll('#turnSeg button').forEach(x=>x.classList.toggle('sel',x.dataset.t===turn));
+      arrow=null; render();
+      setResult('Played '+from+'→'+to+' · '+(turn==='w'?'White':'Black')+' to move','move');
+    }, 550);
+  });
+
+  /* ---------- init ---------- */
+  buildBank();
+  pieces=startPieces();
+  render();
+</script>
+
+<!-- PWA: register the service worker for full offline support -->
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./sw.js').catch(()=>{});
+    });
+  }
+</script>
+</body>
+</html>

@@ -1,0 +1,1319 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Coach — Step 1</title>
+
+<!-- chessground: layout + piece set. Board squares drawn by our own SVG checker below. -->
+<link rel="stylesheet" href="./vendor/chessground.base.css">
+<link rel="stylesheet" href="./vendor/chessground.cburnett.css">
+
+<!-- PWA -->
+<link rel="manifest" href="./manifest.json">
+<meta name="theme-color" content="#15201e">
+<link rel="apple-touch-icon" href="./icons/icon.svg">
+
+<link rel="stylesheet" href="./vendor/fonts/fonts.css">
+
+<style>
+  :root{
+    --bg:#15201e; --bg2:#1b2826; --line:rgba(255,255,255,.08);
+    --ink:#ecece4; --ink-dim:#9bb0aa;
+    --gold:#e0b15a; --green:#7bbd5b; --red:#e08a78;
+    --sq-light:#d9cdb4; --sq-dark:#465863;
+    --card-h:200px;   /* fixed footprint for the coach cards (question pair and the challenge) */
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    background:radial-gradient(120% 90% at 50% -10%, #1c2c29 0%, var(--bg) 55%);
+    color:var(--ink); font-family:"Instrument Sans",system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased; min-height:100%; padding:14px 12px 96px;
+    display:flex; flex-direction:column; align-items:center;
+  }
+  header{width:100%;max-width:440px;display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;}
+  .brand{display:flex;align-items:center;gap:9px;}
+  .brand .dot{width:30px;height:30px;border-radius:8px;background:linear-gradient(150deg,var(--gold),#b9863a);display:grid;place-items:center;color:#1a1408;font-size:17px;}
+  .brand h1{font-family:"Fraunces",serif;font-weight:600;font-size:17px;}
+  .step{font-size:11px;color:var(--ink-dim);background:var(--bg2);border:1px solid var(--line);padding:5px 10px;border-radius:9px;}
+
+  .status{
+    width:100%;max-width:440px;margin-bottom:9px;font-size:14px;font-weight:600;
+    display:flex;align-items:center;gap:8px;min-height:22px;
+  }
+  .status .turnchip{width:11px;height:11px;border-radius:50%;border:1px solid rgba(0,0,0,.3);}
+  .status .turnchip.w{background:#f4f0e6;} .status .turnchip.b{background:#1c2226;}
+  .status.check{color:var(--gold);} .status.over{color:var(--green);}
+
+  /* board frame */
+  .frame{background:var(--bg2);padding:9px;border-radius:14px;border:1px solid var(--line);box-shadow:0 14px 40px rgba(0,0,0,.4);}
+  .board{width:min(92vw,420px);height:min(92vw,420px);}
+
+  /* ---- our board: crisp SVG checkerboard (perfect squares, our palette) ---- */
+  cg-board{
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='2' height='2'%3E%3Crect width='2' height='2' fill='%23d9cdb4'/%3E%3Crect width='1' height='1' fill='%23465863'/%3E%3Crect x='1' y='1' width='1' height='1' fill='%23465863'/%3E%3C/svg%3E");
+    background-size:25% 25%;
+    background-repeat:repeat;
+  }
+  /* highlights tuned to our palette */
+  cg-board square.move-dest{background:radial-gradient(rgba(123,189,91,.5) 22%, transparent 24%);}
+  cg-board square.oc.move-dest{background:radial-gradient(transparent 0%, transparent 78%, rgba(123,189,91,.5) 80%);}
+  cg-board square.last-move{background:rgba(224,177,90,.28);}
+  cg-board square.selected{background:rgba(224,177,90,.45);}
+  cg-board square.check{background:radial-gradient(rgba(224,138,120,.9) 30%, rgba(224,138,120,0) 70%);}
+
+  .controls{width:100%;max-width:440px;margin-top:14px;display:flex;gap:9px;}
+  .btn{flex:1;background:var(--bg2);border:1px solid var(--line);color:var(--ink);border-radius:11px;padding:12px;font-family:inherit;font-size:14px;font-weight:600;cursor:pointer;transition:all .16s;}
+  .btn:hover{border-color:rgba(255,255,255,.22);}
+  .btn.accent{background:linear-gradient(150deg,var(--gold),#c8923f);color:#1a1408;border:none;}
+
+  /* level selector */
+  .levelbar{width:100%;max-width:440px;margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+  .levelbar .lbl{font-size:11px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-dim);flex:0 0 auto;}
+  .levelseg{flex:1;display:flex;gap:4px;background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:3px;}
+  .levelseg button{flex:1;background:none;border:none;color:var(--ink-dim);font-family:inherit;font-size:12px;font-weight:600;padding:7px 2px;border-radius:7px;cursor:pointer;transition:all .15s;}
+  .levelseg button.sel{background:var(--panel-hi,#273935);color:var(--ink);}
+  .levelseg button:focus-visible{outline:2px solid var(--gold);outline-offset:1px;}
+
+  .err{color:var(--red);}
+
+  /* coach card */
+  .coachwrap{width:100%;max-width:440px;margin-top:12px;min-height:var(--card-h);}
+  .qgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  /* fixed footprint: question pair and the full-width challenge all occupy exactly --card-h, so
+     switching between them causes zero vertical jump. Overflow is clipped rather than growing. */
+  .ccard{background:var(--panel,#21302d);border:1px solid var(--line);border-radius:13px;padding:13px;display:flex;flex-direction:column;gap:10px;transition:border-color .2s;height:var(--card-h);overflow:hidden;}
+  .ccard .ceyebrow{font-size:10px;letter-spacing:1.6px;text-transform:uppercase;color:var(--gold);}
+  .ccard .yn{display:flex;gap:6px;}
+  .ccard .yn button{flex:1;background:var(--bg2);border:1px solid var(--line);color:var(--ink-dim);border-radius:8px;padding:8px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;transition:all .16s;}
+  .ccard .yn button:hover{border-color:rgba(255,255,255,.22);}
+  .ccard .yn button:focus-visible{outline:2px solid var(--gold);outline-offset:1px;}
+  .ccard .yn button.sel{background:#273935;color:var(--ink);border-color:rgba(255,255,255,.35);}
+  .ccard .yn button.good{background:rgba(123,189,91,.16);border-color:var(--green);color:var(--green);}
+  .ccard .yn button:disabled{cursor:default;opacity:1;}  /* (M2) locked after the move; keep reveal crisp */
+  .ccard .yn button.bad{background:rgba(224,138,120,.16);border-color:var(--red);color:var(--red);}
+  .ccard .qtext{font-size:15px;font-weight:500;line-height:1.3;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;line-clamp:3;overflow:hidden;}
+  .ccard .cfeedback{font-size:12px;line-height:1.45;display:none;overflow:hidden;}
+  .ccard.revealed .cfeedback{display:block;}
+  .ccard.right{border-color:rgba(123,189,91,.45);} .ccard.right .cfeedback{color:var(--green);}
+  .ccard.wrong{border-color:rgba(224,138,120,.45);} .ccard.wrong .cfeedback{color:var(--red);}
+  /* best-move challenge (gold) */
+  .ccard.challenge{background:linear-gradient(150deg,rgba(224,177,90,.16),rgba(224,177,90,.05));border-color:rgba(224,177,90,.5);}
+  .ccard.challenge.right{border-color:var(--green);}
+  .ccard.challenge.wrong{border-color:var(--gold);}
+  /* open-ended note prompt (no buttons): smaller text, more lines, since there's no Yes/No or feedback */
+  .ccard.note{justify-content:flex-start;background:var(--bg2);}
+  .ccard.note .qtext{font-size:13px;line-height:1.4;-webkit-line-clamp:7;line-clamp:7;color:var(--ink);}
+  /* graduated-hint message line */
+  .hintmsg{width:100%;max-width:440px;margin-top:8px;font-size:13px;font-weight:600;color:var(--gold);text-align:center;}
+  .hintmsg[hidden]{display:none;}
+
+  /* ===================== VISUAL LAYER (presentation only) ===================== */
+  /* header right: thinking-rating badge + fullscreen */
+  .hd-right{display:flex;align-items:center;gap:8px;}
+  .rating-badge{display:flex;align-items:center;gap:7px;background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:5px 9px;}
+  .rating-badge .rb-icon{width:22px;height:22px;border-radius:6px;background:linear-gradient(150deg,var(--gold),#b9863a);display:grid;place-items:center;color:#1a1408;font-size:13px;}
+  .rating-badge .rb-text{display:flex;flex-direction:column;line-height:1.05;}
+  .rating-badge .rb-label{font-size:8px;letter-spacing:1.4px;text-transform:uppercase;color:var(--ink-dim);}
+  .rating-badge .rb-num{font-family:"JetBrains Mono",monospace;font-size:14px;font-weight:700;color:var(--gold);}
+  .iconbtn{width:36px;height:36px;background:var(--bg2);border:1px solid var(--line);color:var(--ink);border-radius:10px;font-size:16px;cursor:pointer;display:grid;place-items:center;transition:all .16s;}
+  .iconbtn:hover{border-color:rgba(255,255,255,.22);}
+  .iconbtn:focus-visible{outline:2px solid var(--gold);outline-offset:1px;}
+
+  /* player strips (chess.com style) */
+  .pstrip{width:100%;max-width:440px;display:flex;align-items:center;gap:10px;padding:6px 4px;}
+  .pstrip .avatar{width:38px;height:38px;border-radius:9px;flex:0 0 auto;display:grid;place-items:center;font-size:20px;background:var(--bg2);border:1px solid var(--line);color:var(--ink);}
+  .pstrip .avatar.opp{background:linear-gradient(150deg,#2a3b37,#1b2826);}
+  .pstrip .pinfo{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;}
+  .pstrip .pname{font-size:14px;font-weight:600;display:flex;align-items:center;gap:7px;}
+  .pstrip .prating{font-size:11px;font-weight:600;color:var(--ink-dim);background:var(--bg2);border:1px solid var(--line);border-radius:6px;padding:1px 6px;}
+  .pstrip .captured{display:flex;align-items:center;flex-wrap:wrap;min-height:16px;font-size:15px;line-height:1;color:#cfe0d8;}
+  .pstrip .captured .cp{margin-right:-3px;opacity:.92;text-shadow:0 1px 1px rgba(0,0,0,.45);}
+  .pstrip .captured .adv{margin-left:8px;font-family:"JetBrains Mono",monospace;font-size:11px;font-weight:700;color:var(--green);}
+  .pstrip .clock{font-family:"JetBrains Mono",monospace;font-size:16px;font-weight:700;color:var(--ink-dim);background:var(--bg2);border:1px solid var(--line);border-radius:9px;padding:7px 11px;flex:0 0 auto;transition:all .16s;}
+  .pstrip .clock.active{color:var(--ink);border-color:var(--gold);box-shadow:inset 0 0 0 1px rgba(224,177,90,.4);}
+
+  /* bottom toolbar (fixed, chess.com style) */
+  .toolbar{position:fixed;left:0;right:0;bottom:0;z-index:30;display:flex;justify-content:center;gap:2px;
+    background:rgba(21,32,30,.96);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+    border-top:1px solid var(--line);padding:7px 8px calc(7px + env(safe-area-inset-bottom));}
+  .toolbar .tbtn{flex:1;max-width:90px;background:none;border:none;color:var(--ink-dim);font-family:inherit;
+    display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 2px;border-radius:9px;cursor:pointer;transition:all .15s;}
+  .toolbar .tbtn:hover{color:var(--ink);background:var(--bg2);}
+  .toolbar .tbtn:focus-visible{outline:2px solid var(--gold);outline-offset:1px;}
+  .toolbar .tbtn .ti{font-size:18px;line-height:1;}
+  .toolbar .tbtn .tl{font-size:10px;font-weight:600;letter-spacing:.3px;}
+  .toolbar .tbtn#newGameBtn .ti{color:var(--gold);}
+
+  /* new game dialog */
+  .modal-backdrop{position:fixed;inset:0;z-index:50;background:rgba(8,14,13,.66);
+    backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);
+    display:flex;align-items:center;justify-content:center;padding:18px;overflow-y:auto;}
+  .modal-backdrop[hidden]{display:none;}
+  .modal{width:100%;max-width:380px;background:var(--bg2);border:1px solid var(--line);border-radius:16px;
+    box-shadow:0 20px 60px rgba(0,0,0,.5);padding:18px 16px 16px;display:flex;flex-direction:column;gap:14px;}
+  .modal h2{font-family:"Fraunces",serif;font-weight:600;font-size:20px;}
+  .field{display:flex;flex-direction:column;gap:7px;}
+  .field .flabel{font-size:11px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-dim);}
+  .seg{display:flex;gap:4px;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:3px;}
+  .seg button{flex:1;background:none;border:none;color:var(--ink-dim);font-family:inherit;font-size:12px;font-weight:600;
+    padding:9px 2px;border-radius:7px;cursor:pointer;transition:all .15s;}
+  .seg button.sel{background:var(--panel-hi,#273935);color:var(--ink);}
+  .seg button:focus-visible{outline:2px solid var(--gold);outline-offset:1px;}
+  .modal-actions{display:flex;gap:9px;margin-top:4px;}
+  .btn.ghost{background:var(--bg);}
+  .btn.go{background:linear-gradient(150deg,var(--green),#5fa047);color:#0f240a;border:none;}
+
+  /* review (Back / Forward history browser) */
+  .toolbar .tbtn:disabled{opacity:.3;cursor:default;}
+  .toolbar .tbtn:disabled:hover{color:var(--ink-dim);background:none;}
+  .reviewbar{width:100%;max-width:440px;margin-top:12px;min-height:var(--card-h);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;
+    background:var(--bg2);border:1px dashed var(--line);border-radius:13px;color:var(--ink-dim);
+    font-size:14px;text-align:center;padding:14px;}
+  .reviewbar[hidden]{display:none;}
+  .reviewbar #reviewMsg{font-weight:600;color:var(--ink);}
+  .reviewbar .btn{max-width:220px;}
+  body.reviewing #coach{display:none;}
+</style>
+</head>
+<body>
+
+  <header>
+    <div class="brand"><div class="dot">&#9822;</div><h1>Coach</h1></div>
+    <div class="hd-right">
+      <div class="rating-badge" title="Thinking Rating">
+        <span class="rb-icon">&#9822;</span>
+        <span class="rb-text"><span class="rb-label">Thinking</span><span class="rb-num" id="thinkingRating">1550</span></span>
+      </div>
+      <button class="iconbtn" id="fsBtn" type="button" aria-label="Toggle fullscreen" title="Fullscreen">&#9974;</button>
+    </div>
+  </header>
+
+  <div class="status" id="status"><span class="turnchip w"></span> Loading…</div>
+
+  <div class="pstrip" id="oppStrip">
+    <div class="avatar opp">&#9823;</div>
+    <div class="pinfo">
+      <div class="pname">Computer <span class="prating" id="oppRating">1200</span></div>
+      <div class="captured" id="capByBlack"></div>
+    </div>
+    <div class="clock" id="clockOpp">5:00</div>
+  </div>
+
+  <div class="frame"><div class="board" id="board"></div></div>
+
+  <div class="pstrip" id="youStrip">
+    <div class="avatar you">&#9817;</div>
+    <div class="pinfo">
+      <div class="pname">You</div>
+      <div class="captured" id="capByWhite"></div>
+    </div>
+    <div class="clock" id="clockYou">5:00</div>
+  </div>
+
+  <div class="coachwrap" id="coach"></div>
+
+  <!-- graduated-hint message (shown only when the Hint button is pressed) -->
+  <div class="hintmsg" id="hintMsg" hidden></div>
+
+  <!-- review-only indicator, shown in place of the coach cards while browsing past moves -->
+  <div class="reviewbar" id="reviewBar" hidden>
+    <span id="reviewMsg">Reviewing</span>
+    <button class="btn ghost" id="reviewLiveBtn" type="button">Return to live &#9197;</button>
+  </div>
+
+  <!-- kept so the existing undo handler still binds without throwing; surfaced later -->
+  <button id="undoBtn" type="button" hidden aria-hidden="true"></button>
+  <!-- the existing new-game reset handler stays bound to this hidden button; the toolbar opens the dialog and Play triggers this -->
+  <button id="newBtn" type="button" hidden aria-hidden="true"></button>
+
+  <nav class="toolbar" id="toolbar" aria-label="Game controls">
+    <button class="tbtn" id="newGameBtn" type="button"><span class="ti">&#9851;</span><span class="tl">New Game</span></button>
+    <button class="tbtn" id="hintBtn" type="button"><span class="ti">&#128161;</span><span class="tl">Hint</span></button>
+    <button class="tbtn" id="analyzeBtn" type="button"><span class="ti">&#128202;</span><span class="tl">Analyze</span></button>
+    <button class="tbtn" id="backBtn" type="button"><span class="ti">&#9664;</span><span class="tl">Back</span></button>
+    <button class="tbtn" id="fwdBtn" type="button"><span class="ti">&#9654;</span><span class="tl">Forward</span></button>
+  </nav>
+
+  <div class="modal-backdrop" id="ngBackdrop" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="ngTitle">
+      <h2 id="ngTitle">New Game</h2>
+
+      <div class="field">
+        <div class="flabel">Play as</div>
+        <div class="seg" id="segColor">
+          <button type="button" data-v="white">White</button>
+          <button type="button" data-v="random" class="sel">Random</button>
+          <button type="button" data-v="black">Black</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <div class="flabel">Time</div>
+        <div class="seg" id="segTime">
+          <button type="button" data-v="unlimited" class="sel">Unlimited</button>
+          <button type="button" data-v="1">1 min</button>
+          <button type="button" data-v="3">3 min</button>
+          <button type="button" data-v="5">5 min</button>
+          <button type="button" data-v="10">10 min</button>
+          <button type="button" data-v="15">15 min</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <div class="flabel">Engine level</div>
+        <div class="levelseg" id="levelSeg">
+          <button data-elo="400">Beginner</button>
+          <button data-elo="800">800</button>
+          <button data-elo="1200" class="sel">1200</button>
+          <button data-elo="1600">1600</button>
+          <button data-elo="2000">2000</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <div class="flabel">Scan mode</div>
+        <div class="seg" id="segScan">
+          <button type="button" data-v="locked" class="sel">Locked</button>
+          <button type="button" data-v="open">Open</button>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn ghost" id="ngCancel" type="button">Cancel</button>
+        <button class="btn go" id="ngPlay" type="button">Play</button>
+      </div>
+    </div>
+  </div>
+
+<script type="module">
+  import { Chessground } from './vendor/chessground.min.js';
+  import { Chess } from './vendor/chess.js';
+
+  /* ================= Stockfish engine (local files, same-origin Worker) ================= */
+  // These two files must sit in the SAME folder as this HTML:
+  //   stockfish-18-lite-single.js   stockfish-18-lite-single.wasm
+  // Must be served over http (VS Code “Live Server”), not opened as a file:// path.
+  const SF_ENGINE = 'stockfish-18-lite-single.js';
+
+  let engine = null;          // the Worker
+  let engineReady = false;    // uci handshake complete
+  let engineDead = false;     // failed to load -> fall back to random
+  let currentElo = 1200;      // from the level selector
+  let readyResolvers = [];    // (3) resolve when engine reports readyok
+
+  // (1) think time scales with level: weak = fast, strong = slower (uses more of its strength)
+  function thinkTime(){
+    if (currentElo <= 400)  return 100;
+    if (currentElo <= 800)  return 200;
+    if (currentElo <= 1200) return 350;
+    if (currentElo <= 1600) return 600;
+    return 900;
+  }
+
+  // Stockfish supports UCI_Elo only ~1320–3190. Below that, fall back to low Skill Level.
+  // (4) gentler floor: Beginner -> Skill Level 1 (not 0), mapping starts at 1.
+  function applyStrength(){
+    if (!engine) return;
+    if (currentElo >= 1320){
+      engine.postMessage('setoption name UCI_LimitStrength value true');
+      engine.postMessage('setoption name UCI_Elo value ' + currentElo);
+    } else {
+      engine.postMessage('setoption name UCI_LimitStrength value false');
+      const skill = Math.max(1, Math.min(6, Math.round((currentElo - 400) / 160) + 1));
+      engine.postMessage('setoption name Skill Level value ' + skill);
+    }
+  }
+
+  // (3) returns a promise that resolves on the next readyok
+  function waitReady(){
+    return new Promise((resolve)=>{
+      readyResolvers.push(resolve);
+      engine.postMessage('isready');
+    });
+  }
+
+  function startEngine(){
+    try {
+      engine = new Worker(SF_ENGINE);   // same-origin: wasm auto-located next to it
+    } catch(e){ engineDead = true; return; }
+
+    engine.onmessage = (e)=>{
+      const line = typeof e.data === 'string' ? e.data : (e.data && e.data.data) || '';
+      if (line === 'uciok'){
+        applyStrength();
+        engine.postMessage('isready');
+      } else if (line === 'readyok'){
+        engineReady = true;
+        const rs = readyResolvers; readyResolvers = [];
+        rs.forEach(r=>r());
+      } else if (line.startsWith('bestmove')){
+        // (C1) match this bestmove to the 'go' that produced it via FIFO generation ids;
+        // ignore anything that isn't the response to the most recently issued 'go'.
+        const gen = engineQueue.shift();
+        if (gen === engineGen && pendingResolve){
+          const uci = line.split(' ')[1];
+          const r = pendingResolve; pendingResolve = null; r(uci);
+        }
+      }
+    };
+    engine.onerror = ()=>{ engineDead = true; };
+    engine.postMessage('uci');
+
+    setTimeout(()=>{ if(!engineReady) engineDead = true; }, 12000);
+  }
+
+  let pendingResolve = null;
+  let engineGen = 0;          // (C1) generation of the latest issued 'go'
+  let engineQueue = [];       // (C1) gens of in-flight 'go's, in order, awaiting their bestmove
+  function bestMove(fen){
+    return new Promise((resolve)=>{
+      pendingResolve = resolve;
+      const gen = ++engineGen; engineQueue.push(gen);
+      engine.postMessage('position fen ' + fen);
+      engine.postMessage('go movetime ' + thinkTime());   // (1) level-based time
+    });
+  }
+  // (C1) invalidate any in-flight engine search (e.g. on New Game) so its stale bestmove is ignored
+  function invalidateEngine(){ engineGen++; pendingResolve = null; }
+  startEngine();
+  /* ====================================================================================== */
+
+  /* ============================ COACHING LAYER ============================ */
+  // Each category is a self-contained object. To add/edit a question later,
+  // just add or change one entry here — the renderer below stays untouched.
+  //
+  //   id       : unique key
+  //   question : text shown on the card
+  //   truth(fen): deterministic — is the answer really "yes" in this position?
+  //   feedback : 4 messages keyed by (answer × correctness)
+
+  function freshChess(fen){ return new Chess(fen); }
+
+  // ---- helpers ----
+  function kingSquare(c, color){
+    for (const row of c.board()) for (const sq of row)
+      if (sq && sq.type === 'k' && sq.color === color) return sq.square;
+    return null;
+  }
+  function neighbors(square){
+    const f = square.charCodeAt(0), r = +square[1], out = [];
+    for (let df=-1; df<=1; df++) for (let dr=-1; dr<=1; dr++){
+      if (!df && !dr) continue;
+      const nf=f+df, nr=r+dr;
+      if (nf>=97 && nf<=104 && nr>=1 && nr<=8) out.push(String.fromCharCode(nf)+nr);
+    }
+    return out;
+  }
+  function flipFen(fen){ const p=fen.split(' '); p[1]=p[1]==='w'?'b':'w'; p[3]='-'; return p.join(' '); }
+  const PIECE_VAL = { p:1, n:3, b:3, r:5, q:9, k:100 };
+
+  // ---- TRUTH (deterministic: is the answer really "yes"?) ----
+  function truthHanging(fen){
+    const c = freshChess(fen);
+    const caps = c.moves({ verbose:true }).filter(m => m.flags.includes('c') || m.flags.includes('e'));
+    for (const m of caps){
+      const sim = freshChess(fen); sim.move({ from:m.from, to:m.to, promotion:'q' });
+      const recapture = sim.moves({ verbose:true }).some(r => r.to===m.to && (r.flags.includes('c')||r.flags.includes('e')));
+      if (!recapture) return true;
+    }
+    return false;
+  }
+  function truthCheck(fen){
+    return freshChess(fen).moves({ verbose:true }).some(m => m.san.includes('+') || m.san.includes('#'));
+  }
+  function truthMyHanging(fen){
+    if (freshChess(fen).isCheck()) return false;   // (M3) flipping while in check is illegal; safe default
+    let fl; try { fl = freshChess(flipFen(fen)); } catch(e){ return false; }
+    const caps = fl.moves({ verbose:true }).filter(m => m.flags.includes('c') || m.flags.includes('e'));
+    for (const m of caps){
+      const sim = freshChess(flipFen(fen));
+      try { sim.move({ from:m.from, to:m.to, promotion:'q' }); } catch(e){ continue; }
+      const recapture = sim.moves({ verbose:true }).some(r => r.to===m.to && (r.flags.includes('c')||r.flags.includes('e')));
+      if (!recapture) return true;
+    }
+    return false;
+  }
+
+  // ---- HEAT (how much this position is worth scanning for the category — never reveals the answer) ----
+  function heatCheck(fen){
+    const c = freshChess(fen);
+    const ek = kingSquare(c, 'b'); if (!ek) return 20;
+    const zone = new Set([ek, ...neighbors(ek)]);
+    const pressure = c.moves({ verbose:true }).filter(m => zone.has(m.to)).length;
+    return Math.min(100, 20 + pressure*20);
+  }
+  function heatEnemyHang(fen){
+    const caps = freshChess(fen).moves({ verbose:true }).filter(m => m.flags.includes('c')||m.flags.includes('e')).length;
+    return Math.min(100, 15 + caps*18);
+  }
+  function heatMyHang(fen){
+    if (freshChess(fen).isCheck()) return 15;      // (M3) avoid flipping an in-check position; base value
+    let fl; try { fl = freshChess(flipFen(fen)); } catch(e){ return 15; }
+    const caps = fl.moves({ verbose:true }).filter(m => m.flags.includes('c')||m.flags.includes('e')).length;
+    return Math.min(100, 15 + caps*18);
+  }
+
+  // --- opponent threatens a check on you next move ---
+  function truthOppCheck(fen){
+    if (freshChess(fen).isCheck()) return false;   // (M3) flipping while in check is illegal; safe default
+    let fl; try { fl = freshChess(flipFen(fen)); } catch(e){ return false; }
+    return fl.moves({ verbose:true }).some(m => m.san.includes('+') || m.san.includes('#'));
+  }
+  function heatOppCheck(fen){
+    if (freshChess(fen).isCheck()) return 20;      // (M3) avoid flipping an in-check position; base value
+    let fl; try { fl = freshChess(flipFen(fen)); } catch(e){ return 20; }
+    const mk = kingSquare(fl, 'w'); if (!mk) return 20;        // my king (white)
+    const zone = new Set([mk, ...neighbors(mk)]);
+    const pressure = fl.moves({ verbose:true }).filter(m => zone.has(m.to)).length;
+    return Math.min(100, 20 + pressure*20);
+  }
+
+  // --- you still have an undeveloped minor piece on its starting square ---
+  function truthUndeveloped(fen){
+    const c = freshChess(fen);
+    const homes = { b:['c1','f1'], n:['b1','g1'] };  // white minors' home squares
+    for (const row of c.board()) for (const sq of row){
+      if (!sq || sq.color !== 'w') continue;
+      const h = homes[sq.type];
+      if (h && h.includes(sq.square)) return true;
+    }
+    return false;
+  }
+  function heatUndeveloped(fen){
+    const c = freshChess(fen);
+    const homes = { b:['c1','f1'], n:['b1','g1'] };
+    let n = 0;
+    for (const row of c.board()) for (const sq of row)
+      if (sq && sq.color==='w' && homes[sq.type] && homes[sq.type].includes(sq.square)) n++;
+    return Math.min(100, 15 + n*22);   // hot early (pieces home), cools as you develop
+  }
+
+  // ---- category registry: add/edit one object to change a question ----
+  const COACH_CATEGORIES = [
+    { id:'hanging', base:10, question:'Can you capture a hanging piece?', truth:truthHanging, heat:heatEnemyHang,
+      feedback:{ yesRight:'Yes — there is a free capture. Grab it.',
+                 yesWrong:'Not quite — every piece you can take is defended.',
+                 noRight:'Right — nothing is hanging; everything is defended.',
+                 noWrong:'Look again — there is an undefended piece you can take.' } },
+    { id:'check', base:10, question:'Do you have a check?', truth:truthCheck, heat:heatCheck,
+      feedback:{ yesRight:'Yes — a check is available. Always look at checks first.',
+                 yesWrong:'No legal check here, but good that you looked.',
+                 noRight:'Right — no check available right now.',
+                 noWrong:'There is a check — scan every way to hit the king.' } },
+    { id:'myhang', base:10, question:'Do you have a piece your opponent can take for free?', truth:truthMyHanging, heat:heatMyHang,
+      feedback:{ yesRight:'Yes — one of your pieces is hanging. Defend it or move it.',
+                 yesWrong:'Actually all your pieces are safe right now.',
+                 noRight:'Right — nothing of yours is hanging.',
+                 noWrong:'One of your pieces is undefended and attacked — spot it.' } },
+    { id:'oppcheck', base:8, question:'Can your opponent check you next move?', truth:truthOppCheck, heat:heatOppCheck,
+      feedback:{ yesRight:'Yes — a check is coming. Make sure you can meet it.',
+                 yesWrong:'No check against you right now, but worth checking.',
+                 noRight:'Right — your king is safe from checks for now.',
+                 noWrong:'There is a check available to your opponent — find it.' } },
+    { id:'develop', base:6, question:'Do you still have an undeveloped minor piece?', truth:truthUndeveloped, heat:heatUndeveloped,
+      feedback:{ yesRight:'Yes — a knight or bishop is still home. Get it into play.',
+                 yesWrong:'Your minor pieces are all developed already.',
+                 noRight:'Right — your minors are developed.',
+                 noWrong:'A knight or bishop is still on its starting square.' } },
+
+    // ---- open-ended NOTE prompts (no truth, no grading — pure thinking cues) ----
+    { id:'open_principles', type:'note', base:6,
+      text:'Opening principles: develop your pieces, control the center, and castle your king to safety.',
+      heat:(fen)=>{ const fm = +(fen.split(' ')[5] || 1); return fm <= 5 ? 80 : 5; } },
+    { id:'plan', type:'note', base:5,
+      text:'What’s your plan for the next two or three moves?', heat:()=>10 },
+    { id:'opp_intent', type:'note', base:5,
+      text:'If you do nothing, what is your opponent trying to do?', heat:()=>10 },
+    { id:'worst_piece', type:'note', base:5,
+      text:'Which of your pieces is doing the least right now?', heat:()=>10 },
+    { id:'predict', type:'note', base:5,
+      text:'Before you move — what will your opponent play in reply?', heat:()=>10 }
+  ];
+
+  // weighted pick of TWO distinct categories (score = base + heat)
+  function pickTwo(fen){
+    const pool = COACH_CATEGORIES.map(cat => ({ cat, score: cat.base + cat.heat(fen) }));
+    function draw(arr){
+      const total = arr.reduce((s,x)=>s+x.score, 0);
+      let r = Math.random()*total;
+      for (let i=0;i<arr.length;i++){ r -= arr[i].score; if (r<=0) return i; }
+      return arr.length-1;
+    }
+    const picks = [];
+    for (let n=0; n<2 && pool.length; n++){ const i = draw(pool); picks.push(pool[i].cat); pool.splice(i,1); }
+    return picks;
+  }
+
+  const coachEl = document.getElementById('coach');
+
+  /* ---- analyst: a SECOND Stockfish, always full strength, MultiPV 2 ----
+     Tunables (later: move to an Advanced Settings panel) */
+  const CRIT_THRESHOLD = 150;   // centipawns: gap between best & 2nd-best to call it "critical"
+  const ANALYST_DEPTH  = 12;
+  const MATE_VAL       = 100000;
+
+  let analyst = null, analystReady = false, analystDead = false;
+  let analystScores = {}, analystResolve = null;
+  let analystGen = 0;          // (M1) generation of the latest issued analyst 'go'
+  let analystQueue = [];       // (M1) gens of in-flight analyst 'go's, awaiting their bestmove
+
+  function startAnalyst(){
+    try { analyst = new Worker(SF_ENGINE); } catch(e){ analystDead = true; return; }
+    analyst.onmessage = (e)=>{
+      const line = typeof e.data === 'string' ? e.data : (e.data && e.data.data) || '';
+      if (line === 'uciok'){
+        analyst.postMessage('setoption name MultiPV value 2');   // full strength, just 2 lines
+        analyst.postMessage('isready');
+      } else if (line === 'readyok'){
+        analystReady = true;
+      } else if (line.startsWith('info') && line.includes('multipv') && line.includes(' pv ')){
+        const mpv = +(line.match(/multipv (\d+)/)||[])[1];
+        const mM = line.match(/score mate (-?\d+)/), mC = line.match(/score cp (-?\d+)/);
+        let cp;
+        if (mM) cp = (Number(mM[1])>0 ? MATE_VAL : -MATE_VAL) - Number(mM[1]);
+        else if (mC) cp = Number(mC[1]);
+        else return;
+        const first = (line.split(' pv ')[1]||'').trim().split(' ')[0];
+        analystScores[mpv] = { cp, move:first };
+      } else if (line.startsWith('bestmove')){
+        // (M1) only honour the bestmove for the most recently issued analyst 'go'; a stale one
+        // resets the score buffer so the next (current) search accumulates cleanly.
+        const gen = analystQueue.shift();
+        if (gen === analystGen && analystResolve){
+          const s = analystScores; analystScores = {};
+          const res = { bestUci: line.split(' ')[1],
+                        c1: s[1] ? s[1].cp : null,
+                        c2: s[2] ? s[2].cp : null };
+          const f = analystResolve; analystResolve = null; f(res);
+        } else {
+          analystScores = {};
+        }
+      }
+    };
+    analyst.onerror = ()=>{ analystDead = true; };
+    analyst.postMessage('uci');
+    setTimeout(()=>{ if(!analystReady) analystDead = true; }, 12000);
+  }
+  startAnalyst();
+
+  function analyze(fen){
+    return new Promise((resolve)=>{
+      analystResolve = resolve; analystScores = {};
+      const gen = ++analystGen; analystQueue.push(gen);
+      analyst.postMessage('position fen ' + fen);
+      analyst.postMessage('go depth ' + ANALYST_DEPTH);
+    });
+  }
+  // (M1) invalidate any in-flight analyst search (e.g. on New Game) so its stale result is ignored
+  function invalidateAnalyst(){ analystGen++; analystResolve = null; analystScores = {}; }
+  const sleep = (ms)=> new Promise(r=>setTimeout(r,ms));
+
+  /* ---- coach state ---- */
+  let coachTurn = 0;            // increments each time it becomes the human's turn
+  let activeChallenge = null;   // {move:uci} when this turn is a best-move challenge
+
+  function renderCoach(){
+    if (chess.isGameOver()){ coachEl.innerHTML = ''; activeChallenge = null; return; }
+    if (chess.turn() !== 'w') return;          // opponent's turn: leave the card as-is
+    coachTurn++;
+    const myTurn = coachTurn;
+    activeChallenge = null;
+    buildQuestionCard();                       // show a normal question immediately
+    maybeChallenge(chess.fen(), myTurn);       // may upgrade this turn to a challenge
+  }
+
+  function buildQuestionCard(){
+    const cats = pickTwo(chess.fen());
+    const grid = document.createElement('div');
+    grid.className = 'qgrid';
+    coachEl.innerHTML = '';
+    coachEl.appendChild(grid);
+    cats.forEach(cat => grid.appendChild(makeCard(cat)));
+  }
+
+  function makeCard(cat){
+    const card = document.createElement('div');
+    card.className = 'ccard';
+    card._cat = cat;            // (additive) remember category for the passive reveal of unanswered cards
+
+    // (NEW) open-ended note card: lightbulb + text, no Yes/No, no grading
+    if (cat.type === 'note'){
+      card.classList.add('note');
+      card.innerHTML =
+        '<div class="ceyebrow">&#128161; Note</div>' +
+        '<div class="qtext">' + cat.text + '</div>';
+      return card;
+    }
+
+    // yes/no scan card (unchanged behaviour)
+    card.innerHTML =
+      '<div class="yn"><button data-v="yes">Yes</button><button data-v="no">No</button></div>' +
+      '<div class="qtext">' + cat.question + '</div>' +
+      '<div class="cfeedback"></div>';
+    card._answered = false;     // (additive) flips true once the user grades this card
+    const fb = card.querySelector('.cfeedback');
+    const btns = card.querySelectorAll('.yn button');
+    btns.forEach(b => b.addEventListener('click', ()=>{
+      card._answered = true;    // (additive) mark answered so the reveal skips it
+      const said = b.dataset.v === 'yes';
+      const isTrue = cat.truth(chess.fen());
+      const correct = (said === isTrue);
+      btns.forEach(x => x.classList.remove('sel','good','bad'));
+      b.classList.add('sel', correct ? 'good' : 'bad');
+      card.classList.remove('right','wrong');
+      card.classList.add('revealed', correct ? 'right' : 'wrong');
+      fb.textContent = said
+        ? (correct ? cat.feedback.yesRight : cat.feedback.yesWrong)
+        : (correct ? cat.feedback.noRight  : cat.feedback.noWrong);
+      if (window.afterCardAnswered) window.afterCardAnswered();   // (scan-lock) re-check unlock
+    }));
+    return card;
+  }
+
+  // (additive) educational reveal: for each shown YES/NO scan card the user did NOT answer this turn,
+  // paint the correct button green — passively (no sel/right/wrong, no feedback text). Reuses the
+  // category's existing truth() on the pre-move position. Challenge cards (no Yes/No) are skipped.
+  // Cleared automatically next turn when buildQuestionCard() replaces the cards.
+  function revealUnanswered(fen){
+    coachEl.querySelectorAll('.ccard').forEach(card => {
+      if (card.classList.contains('challenge')) return;   // best-move challenge has no Yes/No
+      if (card._answered || !card._cat) return;            // answered cards stay exactly as they are
+      if (card._cat.type === 'note') return;               // note prompts have nothing to reveal
+      const want = card._cat.truth(fen) ? 'yes' : 'no';
+      const btn = card.querySelector('.yn button[data-v="'+want+'"]');
+      if (btn) btn.classList.add('good');                  // same green styling as a correct answer
+    });
+  }
+
+  function buildChallengeCard(){
+    coachEl.innerHTML =
+      '<div class="ccard challenge">' +
+        '<div class="ceyebrow" style="color:var(--gold)">Critical position</div>' +
+        '<div class="qtext">There\u2019s a strong move here \u2014 find it on the board.</div>' +
+        '<div class="cfeedback"></div>' +
+      '</div>';
+  }
+
+  function showChallengeResult(challenge, playedUci){
+    const correct = playedUci.slice(0,4) === challenge.move.slice(0,4);
+    coachEl.innerHTML =
+      '<div class="ccard challenge revealed ' + (correct?'right':'wrong') + '">' +
+        '<div class="ceyebrow" style="color:var(--gold)">Critical position</div>' +
+        '<div class="qtext">' + (correct ? 'You found it.' : 'That wasn\u2019t the strongest move.') + '</div>' +
+        '<div class="cfeedback" style="display:block">' +
+          (correct ? 'Best move played \u2014 nicely spotted.'
+                   : 'The engine preferred a sharper move here.') +
+        '</div>' +
+      '</div>';
+  }
+
+  async function maybeChallenge(fen, myTurn){
+    if (analystDead) return;
+    if (!analystReady){
+      const t0 = Date.now();
+      while (!analystReady && !analystDead && Date.now()-t0 < 12000){ await sleep(150); }
+    }
+    if (analystDead || myTurn !== coachTurn) return;
+    let res; try { res = await analyze(fen); } catch(e){ return; }
+    if (myTurn !== coachTurn) return;                  // user already moved on
+    const critical = res.c1 != null && (res.c2 == null || (res.c1 - res.c2) >= CRIT_THRESHOLD);
+    if (critical && res.bestUci && res.bestUci !== '(none)'){
+      activeChallenge = { move: res.bestUci };
+      buildChallengeCard();
+    }
+  }
+  /* ======================================================================= */
+
+  const chess = new Chess();
+  const boardEl = document.getElementById('board');
+  const statusEl = document.getElementById('status');
+
+  // map chess.js legal moves -> chessground dests Map
+  function computeDests(){
+    const dests = new Map();
+    for (const m of chess.moves({ verbose:true })){
+      if (!dests.has(m.from)) dests.set(m.from, []);
+      dests.get(m.from).push(m.to);
+    }
+    return dests;
+  }
+
+  const cg = Chessground(boardEl, {
+    fen: chess.fen(),
+    orientation: 'white',
+    turnColor: 'white',
+    movable: { free:false, color:'white', dests: computeDests(), showDests:true },
+    draggable: { showGhost:true },
+    animation: { enabled:true, duration:180 },
+    events: { move: onUserMove }
+  });
+
+  function syncBoard(){
+    cg.set({
+      fen: chess.fen(),
+      turnColor: chess.turn()==='w' ? 'white' : 'black',
+      check: chess.isCheck(),
+      movable: { color:'white', dests: computeDests() }
+    });
+    updateStatus();
+  }
+
+  function updateStatus(){
+    statusEl.className = 'status';
+    if (chess.isCheckmate()){
+      statusEl.classList.add('over');
+      statusEl.innerHTML = (chess.turn()==='w' ? 'Black' : 'White') + ' wins — checkmate';
+    } else if (chess.isStalemate()){
+      statusEl.classList.add('over'); statusEl.textContent = 'Draw — stalemate';
+    } else if (chess.isDraw()){
+      statusEl.classList.add('over'); statusEl.textContent = 'Draw';
+    } else {
+      const w = chess.turn()==='w';
+      const chip = '<span class="turnchip '+(w?'w':'b')+'"></span> ';
+      if (chess.isCheck()){ statusEl.classList.add('check'); statusEl.innerHTML = chip + (w?'White':'Black') + ' to move — check'; }
+      else statusEl.innerHTML = chip + (w?'Your move':'Opponent thinking…');
+    }
+    renderCoach();
+  }
+
+  // user (white) made a move on the board
+  function onUserMove(from, to){
+    const challenge = activeChallenge;          // snapshot before the turn advances
+    const playedUci = from + to;
+    const preFen = chess.fen();                 // (additive) position the shown cards refer to
+    let move;
+    try { move = chess.move({ from, to, promotion:'q' }); }  // (C1) chess.js 1.4 throws on illegal
+    catch(e){ syncBoard(); return; }
+    if (!move){ syncBoard(); return; }
+    revealUnanswered(preFen);                    // (additive) passively reveal unanswered scan cards
+    coachEl.querySelectorAll('.yn button').forEach(b => b.disabled = true);  // (M2) lock grading after the move
+    syncBoard();                                 // board updates; coach card left as-is (opponent turn)
+    if (challenge) showChallengeResult(challenge, playedUci);  // overwrite card with result
+    if (chess.isGameOver()) return;
+    cg.set({ movable:{ color:'white', dests:new Map() } });
+    setTimeout(opponentMove, 350);
+  }
+
+  // ===== OPPONENT: Stockfish (falls back to random only if the engine failed to load) =====
+  async function opponentMove(){
+    if (chess.isGameOver()) { syncBoard(); return; }
+
+    // wait briefly for the engine to finish its UCI handshake on the very first move
+    if (!engineReady && !engineDead){
+      const t0 = Date.now();
+      while (!engineReady && !engineDead && Date.now()-t0 < 12000){
+        await new Promise(r=>setTimeout(r,150));
+      }
+    }
+
+    let uci = null;
+    if (engineReady && !engineDead){
+      try { uci = await bestMove(chess.fen()); } catch(e){ uci = null; }
+    }
+
+    if (uci && uci !== '(none)'){
+      const from = uci.slice(0,2), to = uci.slice(2,4);
+      const promotion = uci.length > 4 ? uci[4] : 'q';
+      try { chess.move({ from, to, promotion }); }            // (C1) ignore a stale/illegal engine move
+      catch(e){ console.warn('Ignored stale/illegal engine move:', uci, e); syncBoard(); return; }
+      cg.move(from, to);
+      syncBoard();
+    } else {
+      // fallback: random legal move (engine unavailable)
+      const moves = chess.moves({ verbose:true });
+      if (moves.length === 0){ syncBoard(); return; }
+      const m = moves[Math.floor(Math.random()*moves.length)];
+      chess.move(m.san); cg.move(m.from, m.to); syncBoard();
+      if (engineDead) flagFallback();
+    }
+  }
+
+  function flagFallback(){
+    const n = document.getElementById('status');
+    n.className = 'status';
+    n.innerHTML = '<span class="err"><b>Engine didn\u2019t load</b> \u2014 playing random moves as a fallback. '+
+                  'Check the connection on first load, or serve the files locally.</span>';
+  }
+  // =====================================================================
+
+  // level selector
+  document.querySelectorAll('#levelSeg button').forEach(b=>{
+    b.addEventListener('click', async ()=>{
+      document.querySelectorAll('#levelSeg button').forEach(x=>x.classList.remove('sel'));
+      b.classList.add('sel');
+      currentElo = +b.dataset.elo;
+      applyStrength();
+      if (engine && !engineDead) await waitReady();   // (3) ensure option took effect
+    });
+  });
+
+  document.getElementById('newBtn').addEventListener('click', ()=>{
+    invalidateEngine(); invalidateAnalyst();   // (C1/M1) drop any in-flight search so it can't apply to the new game
+    chess.reset();
+    if (engine && !engineDead){ engine.postMessage('ucinewgame'); engine.postMessage('isready'); } // (2)
+    cg.set({ fen: chess.fen(), lastMove:undefined, check:false,
+             turnColor:'white', movable:{ color:'white', dests:computeDests() } });
+    updateStatus();
+  });
+
+  document.getElementById('undoBtn').addEventListener('click', ()=>{
+    chess.undo(); // undo opponent
+    chess.undo(); // undo your move
+    syncBoard();
+    cg.set({ lastMove:undefined });
+  });
+
+  updateStatus();
+
+  // show the file:// hint ONLY if the core libraries failed to load
+  window.addEventListener('DOMContentLoaded', ()=>{
+    if (typeof Chessground === 'undefined' || typeof Chess === 'undefined'){
+      document.getElementById('status').innerHTML =
+        '<span class="err"><b>Load error:</b> chess libraries did not load. '+
+        'If you opened the file directly, run it through a local server instead of file://.</span>';
+    }
+  });
+
+  /* ===================== VISUAL LAYER (presentation only — no game/coach logic) =====================
+     This block ONLY reads chess.board()/chess.turn() and currentElo to paint the strips, and ADDS
+     listeners. It does not alter any engine/analyst/UCI handling, the COACH_CATEGORIES registry,
+     truth()/heat(), pickTwo(), challenge detection, move handling, or chess.js wiring. updateStatus()
+     is wrapped additively (original runs first, unchanged) so the captured-piece rows and the
+     side-to-move clock refresh on every position change. */
+  (function(){
+    const GLYPH = { w:{p:'♙',n:'♘',b:'♗',r:'♖',q:'♕'},
+                    b:{p:'♟',n:'♞',b:'♝',r:'♜',q:'♛'} };
+    const START = { p:8, n:2, b:2, r:2, q:1 };
+    const VAL   = { p:1, n:3, b:3, r:5, q:9 };
+
+    function onBoardCounts(){
+      const on = { w:{p:0,n:0,b:0,r:0,q:0}, b:{p:0,n:0,b:0,r:0,q:0} };
+      for (const row of chess.board()) for (const sq of row)
+        if (sq && sq.type !== 'k') on[sq.color][sq.type]++;
+      return on;
+    }
+    // pieces of `side` missing from the board = pieces the OTHER player has captured
+    function capturedHtml(on, side){
+      let html = '';
+      for (const t of ['p','n','b','r','q']){
+        const gone = START[t] - on[side][t];
+        for (let i=0;i<gone;i++) html += '<span class="cp">'+GLYPH[side][t]+'</span>';
+      }
+      return html;
+    }
+    function points(on, side){ let p=0; for (const t in VAL) p += on[side][t]*VAL[t]; return p; }
+
+    function updateVisuals(){
+      const on = onBoardCounts();
+      const hc = (window.humanColor === 'black') ? 'b' : 'w';   // human's side (default White)
+      const oc = hc === 'w' ? 'b' : 'w';                        // engine's side
+      const youCap = document.getElementById('capByWhite'); // "You" strip: pieces YOU captured
+      const oppCap = document.getElementById('capByBlack'); // "Computer" strip: pieces the engine captured
+      const diff = points(on, hc) - points(on, oc);            // material from the human's perspective
+      if (youCap){ youCap.innerHTML = capturedHtml(on, oc) + (diff>0 ? '<span class="adv">+'+diff+'</span>' : ''); }
+      if (oppCap){ oppCap.innerHTML = capturedHtml(on, hc) + (diff<0 ? '<span class="adv">+'+(-diff)+'</span>' : ''); }
+
+      const youClk = document.getElementById('clockYou');
+      const oppClk = document.getElementById('clockOpp');
+      const humanToMove = chess.turn() === hc;
+      if (youClk) youClk.classList.toggle('active', humanToMove);
+      if (oppClk) oppClk.classList.toggle('active', !humanToMove);
+
+      const oppR = document.getElementById('oppRating');
+      if (oppR) oppR.textContent = currentElo;
+    }
+
+    // additive wrap: original updateStatus runs untouched, then visuals refresh
+    const _origUpdateStatus = updateStatus;
+    updateStatus = function(){ _origUpdateStatus.apply(this, arguments); updateVisuals(); };
+
+    // extra (non-invasive) listener so opponent rating tracks the level instantly
+    document.querySelectorAll('#levelSeg button').forEach(b=>{
+      b.addEventListener('click', ()=>{ const o=document.getElementById('oppRating'); if (o) o.textContent = b.dataset.elo; });
+    });
+
+    // fullscreen toggle (UI only)
+    const fsBtn = document.getElementById('fsBtn');
+    if (fsBtn) fsBtn.addEventListener('click', ()=>{
+      try {
+        if (!document.fullscreenElement){ if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen(); }
+        else { if (document.exitFullscreen) document.exitFullscreen(); }
+      } catch(e){ /* ignore */ }
+    });
+
+    // toolbar buttons that are intentionally inert for now (present, but must not throw)
+    ['backBtn','fwdBtn'].forEach(id=>{
+      const el = document.getElementById(id);
+      if (el) el.addEventListener('click', (e)=>{ e.preventDefault(); /* no-op for now */ });
+    });
+
+    // Analyze: open the standalone analysis board in the same tab
+    const analyzeBtn = document.getElementById('analyzeBtn');
+    if (analyzeBtn) analyzeBtn.addEventListener('click', ()=>{ window.location.href = 'analysis_board.html'; });
+
+    updateVisuals(); // initial paint (starting position: no captures, white clock active)
+  })();
+
+  /* ===================== NEW GAME DIALOG (presentation + reuse of existing reset) =====================
+     Opens from the toolbar; the existing reset logic stays bound to the hidden #newBtn and is REUSED
+     (not duplicated) by the Play button. For "Black", board orientation + which side the human drags is
+     handled by ADDITIVELY wrapping syncBoard (original runs first, unchanged) and by firing the existing
+     opponentMove() so the engine plays White's first move. This block does NOT touch the engine/analyst
+     workers, COACH_CATEGORIES, truth()/heat(), pickTwo(), challenge detection, or chess.js move handling. */
+  (function(){
+    // session-only prefs (no localStorage yet — that's the packaging step)
+    window.gamePrefs  = window.gamePrefs || { color:'random', time:'unlimited', scanMode:'locked' };
+    window.scanMode   = window.gamePrefs.scanMode;   // remembered only; no locking behavior yet
+    window.humanColor = 'white';
+
+    const backdrop = document.getElementById('ngBackdrop');
+    const segColor = document.getElementById('segColor');
+    const segTime  = document.getElementById('segTime');
+    const segScan  = document.getElementById('segScan');
+
+    function bindSeg(seg, key){
+      seg.querySelectorAll('button').forEach(b=>{
+        b.addEventListener('click', ()=>{
+          seg.querySelectorAll('button').forEach(x=>x.classList.remove('sel'));
+          b.classList.add('sel');
+          window.gamePrefs[key] = b.dataset.v;
+          if (key === 'scanMode') window.scanMode = b.dataset.v;   // store only
+        });
+      });
+    }
+    bindSeg(segColor,'color'); bindSeg(segTime,'time'); bindSeg(segScan,'scanMode');
+
+    function selectIn(seg, val){ seg.querySelectorAll('button').forEach(x=>x.classList.toggle('sel', x.dataset.v===val)); }
+    function reflectPrefs(){ selectIn(segColor,gamePrefs.color); selectIn(segTime,gamePrefs.time); selectIn(segScan,gamePrefs.scanMode); }
+
+    function openDialog(){ reflectPrefs(); backdrop.hidden = false; }
+    function closeDialog(){ backdrop.hidden = true; }
+
+    const tbNew = document.getElementById('newGameBtn');
+    if (tbNew) tbNew.addEventListener('click', openDialog);
+    document.getElementById('ngCancel').addEventListener('click', closeDialog);
+    backdrop.addEventListener('click', (e)=>{ if (e.target === backdrop) closeDialog(); });
+    document.addEventListener('keydown', (e)=>{ if (e.key === 'Escape' && !backdrop.hidden) closeDialog(); });
+
+    /* ---- human clock (timer/display only — does NOT touch move/engine logic) ----
+       Counts down only on the human's turn; pauses on the engine's turn. The engine clock is
+       static. Unlimited = no countdown (∞). At 0:00 it stops and the status shows "Time" — no
+       forfeit/game-over logic (that's a later step). */
+    let humanLeft = Infinity;   // seconds remaining for the human; Infinity = unlimited
+    let timeUp = false;
+    function fmtClock(sec){
+      if (sec === Infinity) return '∞';
+      sec = Math.max(0, Math.floor(sec));
+      return Math.floor(sec/60) + ':' + String(sec%60).padStart(2,'0');
+    }
+    function renderHumanClock(){ const y=document.getElementById('clockYou'); if (y) y.textContent = fmtClock(humanLeft); }
+    function setupClocks(t){
+      const o=document.getElementById('clockOpp');
+      if (o) o.textContent = t === 'unlimited' ? '∞' : (t + ':00');   // engine clock: static label only
+      humanLeft = t === 'unlimited' ? Infinity : (+t)*60;
+      timeUp = false;
+      renderHumanClock();
+    }
+    setupClocks(gamePrefs.time);   // reflect the default on load
+
+    setInterval(()=>{
+      if (humanLeft === Infinity || timeUp) return;
+      if (chess.isGameOver()) return;
+      const humanChar = (window.humanColor === 'black') ? 'b' : 'w';
+      if (chess.turn() !== humanChar) return;       // pause during the engine's turn
+      humanLeft -= 1;
+      if (humanLeft <= 0){
+        humanLeft = 0; timeUp = true; renderHumanClock();
+        const st = document.getElementById('status');
+        if (st){ st.className = 'status'; st.innerHTML = '<span class="turnchip '+humanChar+'"></span> Time'; }
+        return;
+      }
+      renderHumanClock();
+    }, 1000);
+
+    // additively keep the human's pieces draggable + board flipped while playing Black
+    const _origSyncBoard = syncBoard;
+    syncBoard = function(){
+      _origSyncBoard.apply(this, arguments);
+      if (window.humanColor === 'black'){
+        cg.set({ orientation:'black', movable:{ color:'black', dests:computeDests() } });
+      }
+    };
+
+    document.getElementById('ngPlay').addEventListener('click', ()=>{
+      const choice   = gamePrefs.color;
+      const resolved = choice === 'random' ? (Math.random() < 0.5 ? 'white' : 'black') : choice;
+      window.humanColor = resolved;
+      window.scanMode   = gamePrefs.scanMode;
+      setupClocks(gamePrefs.time);   // reset + (re)start the human clock for the new game
+      closeDialog();
+
+      // REUSE the existing new-game reset (chess.reset + ucinewgame + board reset + updateStatus)
+      document.getElementById('newBtn').click();
+
+      // orientation + who-moves-first
+      cg.set({ orientation: resolved === 'black' ? 'black' : 'white' });
+      if (resolved === 'black'){
+        cg.set({ movable:{ color:'black', dests:computeDests() } });
+        setTimeout(opponentMove, 350);   // engine (White) makes the first move
+      }
+    });
+  })();
+
+  /* ===================== REVIEW LAYER (Back / Forward history browser — display only) =====================
+     Steps the chessground DISPLAY through past positions without ever calling chess.undo() or mutating the
+     real game. The chess instance stays at the live position the whole time; dragging is only possible when
+     live (the board is viewOnly while reviewing). syncBoard is reused to snap back to live. This block does
+     NOT touch the engine/analyst workers, COACH_CATEGORIES, truth()/heat(), pickTwo(), challenge detection,
+     or the core onUserMove/opponentMove move-making. */
+  (function(){
+    let reviewIdx = null;   // null = at live; otherwise an index into the FEN timeline (0 = start position)
+
+    const reviewBar = document.getElementById('reviewBar');
+    const reviewMsg = document.getElementById('reviewMsg');
+    const backBtn   = document.getElementById('backBtn');
+    const fwdBtn    = document.getElementById('fwdBtn');
+    const liveBtn   = document.getElementById('reviewLiveBtn');
+
+    const isReviewing = ()=> reviewIdx !== null;
+
+    // Build the FEN timeline additively by replaying the real game's SAN history from the standard start.
+    // (The game always begins from the initial position; reset() returns to it.) Never mutates `chess`.
+    function timeline(){
+      const tmp = new Chess();
+      const fens = [tmp.fen()];
+      for (const san of chess.history()){ tmp.move(san); fens.push(tmp.fen()); }
+      return fens;
+    }
+
+    function updateNavButtons(){
+      const histLen = chess.history().length;
+      const backOn = isReviewing() ? reviewIdx > 0 : histLen > 0;
+      const fwdOn  = isReviewing();          // Forward only meaningful while reviewing
+      if (backBtn) backBtn.disabled = !backOn;
+      if (fwdBtn)  fwdBtn.disabled  = !fwdOn;
+    }
+
+    function renderReview(){
+      const fens = timeline();
+      const live = fens.length - 1;          // index of the live position
+      if (reviewIdx >= live){ exitReview(); return; }
+      if (reviewIdx < 0) reviewIdx = 0;
+      const fen = fens[reviewIdx];
+      const tmp = new Chess(fen);
+      let lastMove;
+      if (reviewIdx >= 1){
+        const vh = chess.history({ verbose:true })[reviewIdx-1];
+        if (vh) lastMove = [vh.from, vh.to];
+      }
+      cg.set({
+        fen,
+        viewOnly: true,                      // display-only: no dragging or selecting
+        turnColor: tmp.turn()==='w' ? 'white' : 'black',
+        check: tmp.isCheck(),
+        lastMove
+      });
+      document.body.classList.add('reviewing');
+      reviewBar.hidden = false;
+      reviewMsg.textContent = reviewIdx === 0
+        ? 'Reviewing — start position (0 / ' + live + ')'
+        : 'Reviewing — move ' + reviewIdx + ' / ' + live;
+      updateNavButtons();
+    }
+
+    function exitReview(){
+      if (!isReviewing()) return;
+      reviewIdx = null;
+      document.body.classList.remove('reviewing');
+      reviewBar.hidden = true;
+      cg.set({ viewOnly: false });           // re-enable interaction
+      syncBoard();                            // restore live fen + movable (+ Black wrap) + coach cards
+      updateNavButtons();
+    }
+
+    function goBack(){
+      if (backBtn && backBtn.disabled) return;
+      const histLen = chess.history().length;
+      if (!isReviewing()){
+        if (histLen === 0) return;           // at the very start: nothing earlier
+        reviewIdx = histLen - 1;             // from live, step one move earlier
+      } else {
+        if (reviewIdx <= 0) return;
+        reviewIdx -= 1;
+      }
+      renderReview();
+    }
+
+    function goForward(){
+      if (!isReviewing()) return;            // already live -> no-op
+      reviewIdx += 1;
+      if (reviewIdx >= chess.history().length){ exitReview(); return; }  // stepped onto live
+      renderReview();
+    }
+
+    if (backBtn) backBtn.addEventListener('click', goBack);
+    if (fwdBtn)  fwdBtn.addEventListener('click', goForward);
+    if (liveBtn) liveBtn.addEventListener('click', exitReview);
+
+    // Snap to live whenever a real move updates the board (user or engine). syncBoard runs for every
+    // actual position change and never during review stepping, so this never fires mid-browse.
+    const _prevSyncBoard = syncBoard;
+    syncBoard = function(){
+      _prevSyncBoard.apply(this, arguments);   // sets the live board + movable + coach
+      if (isReviewing()){                       // a new move arrived while reviewing -> snap to live
+        reviewIdx = null;
+        document.body.classList.remove('reviewing');
+        reviewBar.hidden = true;
+        cg.set({ viewOnly: false });
+      }
+      updateNavButtons();
+    };
+
+    // New Game resets via the hidden #newBtn (which doesn't call syncBoard): clear any review state too.
+    document.getElementById('newBtn').addEventListener('click', ()=>{
+      reviewIdx = null;
+      document.body.classList.remove('reviewing');
+      reviewBar.hidden = true;
+      cg.set({ viewOnly: false });
+      updateNavButtons();
+    });
+
+    updateNavButtons();   // initial: Back disabled (no moves yet), Forward disabled (live)
+  })();
+
+  /* ===================== HINT LAYER (graduated hints for the gold challenge — display only) =====================
+     Reads the existing activeChallenge (set by the protected challenge detection) and draws annotations with
+     cg.setAutoShapes — it never mutates the game or chess.js. hintLevel resets whenever renderCoach runs
+     (new turn / new card set, and right after the user moves). Does not touch engine/analyst, truth/heat,
+     pickTwo, challenge detection, or move handling. */
+  (function(){
+    let hintLevel = 0;
+    const hintBtn = document.getElementById('hintBtn');
+    const hintMsg = document.getElementById('hintMsg');
+
+    function showHintMsg(text){ if (hintMsg){ hintMsg.textContent = text; hintMsg.hidden = false; } }
+    function hideHintMsg(){ if (hintMsg){ hintMsg.textContent = ''; hintMsg.hidden = true; } }
+    function clearHintShapes(){ try { cg.setAutoShapes([]); } catch(e){} }
+
+    // classify the challenge move on a CLONE — never mutates the live game
+    function classify(uci){
+      try {
+        const tmp = new Chess(chess.fen());
+        const m = tmp.move({ from:uci.slice(0,2), to:uci.slice(2,4), promotion: uci.length>4 ? uci[4] : 'q' });
+        if (!m) return 'It’s a strong move.';
+        if (m.san.includes('+') || m.san.includes('#')) return 'It’s a check.';
+        if (m.san.includes('x')) return 'It’s a capture.';
+        return 'It’s a quiet move.';
+      } catch(e){ return 'It’s a strong move.'; }
+    }
+
+    function applyHint(){
+      const uci = activeChallenge.move;
+      const from = uci.slice(0,2), to = uci.slice(2,4);
+      if (hintLevel >= 1) showHintMsg(classify(uci));
+      const shapes = [];
+      if (hintLevel >= 2) shapes.push({ orig: from, brush:'green' });            // ring the piece to move
+      if (hintLevel >= 3) shapes.push({ orig: to,   brush:'blue'  });            // ring the destination
+      if (hintLevel >= 4) shapes.push({ orig: from, dest: to, brush:'green' });  // full answer arrow
+      try { cg.setAutoShapes(shapes); } catch(e){}
+    }
+
+    if (hintBtn) hintBtn.addEventListener('click', ()=>{
+      if (!activeChallenge){ showHintMsg('Hints appear in critical positions.'); return; }
+      hintLevel = Math.min(4, hintLevel + 1);
+      applyHint();
+    });
+
+    // reset hint state on every render (turn change / new card set, and right after the user moves)
+    const _origRenderCoach = renderCoach;
+    renderCoach = function(){
+      _origRenderCoach.apply(this, arguments);
+      hintLevel = 0;
+      hideHintMsg();
+      clearHintShapes();
+    };
+  })();
+
+  /* ===================== SCAN-LOCK LAYER (Locked / Open scan mode — movable gating only) =====================
+     In Locked mode the human's pieces stay un-movable on their LIVE turn until every shown YES/NO scan card is
+     answered (note cards and the gold challenge never block). Re-enabling uses the same computeDests() as today.
+     This only gates `movable`; it never mutates chess.js, the engine/analyst, truth/heat, pickTwo, challenge
+     detection, move-making, or the Back/Forward review layer (it stands down whenever the board is in review). */
+  (function(){
+    const statusEl = document.getElementById('status');
+    const humanChar = ()=> (window.humanColor === 'black') ? 'b' : 'w';
+    const LOCK_TEXT = 'Answer the questions to unlock your move.';
+
+    function pendingYesNo(){
+      let pending = 0;
+      coachEl.querySelectorAll('.ccard').forEach(card => {
+        if (card.classList.contains('challenge')) return;        // challenge has no Yes/No
+        if (!card._cat || card._cat.type === 'note') return;      // notes never require an answer
+        if (!card._answered) pending++;
+      });
+      return pending;
+    }
+
+    // The locked hint lives IN the existing status line (no extra element -> zero layout shift).
+    const isShowingLock = ()=> !!statusEl && statusEl.textContent.indexOf(LOCK_TEXT) !== -1;
+    // mirror of updateStatus()'s normal (non-game-over) line, used only to revert our swap
+    function normalStatus(){
+      const w = chess.turn() === 'w';
+      const chip = '<span class="turnchip ' + (w ? 'w' : 'b') + '"></span> ';
+      if (chess.isCheck()) return { cls:'status check', html: chip + (w ? 'White' : 'Black') + ' to move — check' };
+      return { cls:'status', html: chip + (w ? 'Your move' : 'Opponent thinking…') };
+    }
+    function setStatusLine(showLock){
+      if (!statusEl) return;
+      if (showLock){
+        if (!isShowingLock()){
+          statusEl.className = 'status';
+          statusEl.innerHTML = '<span class="turnchip ' + (chess.turn()==='w'?'w':'b') + '"></span> ' + LOCK_TEXT;
+        }
+      } else if (isShowingLock() && !chess.isGameOver()){
+        const s = normalStatus(); statusEl.className = s.cls; statusEl.innerHTML = s.html;
+      }
+    }
+
+    function applyScanLock(){
+      const reviewing = document.body.classList.contains('reviewing');
+      const humanLiveTurn = !reviewing && !chess.isGameOver() && chess.turn() === humanChar();
+      if (!humanLiveTurn){ setStatusLine(false); return; }          // engine turn / review / over: don't gate
+      const locked = (window.scanMode === 'locked') && pendingYesNo() > 0;
+      if (locked){
+        cg.set({ movable:{ color: window.humanColor || 'white', dests: new Map() } });   // freeze pieces
+        setStatusLine(!chess.isCheck());   // swap "Your move" -> unlock message (leave check lines intact)
+      } else {
+        cg.set({ movable:{ color: window.humanColor || 'white', dests: computeDests() } }); // normal dests
+        setStatusLine(false);
+      }
+    }
+
+    // unlock check fired by a yes/no card's grade click (see makeCard)
+    window.afterCardAnswered = applyScanLock;
+
+    // re-evaluate the lock after every coach render (each new turn / new card set, new game, and post-move)
+    const _rcRender = renderCoach;
+    renderCoach = function(){ _rcRender.apply(this, arguments); applyScanLock(); };
+
+    // a turn can upgrade to the gold challenge after render (no Yes/No) -> must unlock
+    const _origBuildChallengeCard = buildChallengeCard;
+    buildChallengeCard = function(){ _origBuildChallengeCard.apply(this, arguments); applyScanLock(); };
+
+    applyScanLock();   // gate the very first turn (initial render happened before this layer loaded)
+  })();
+</script>
+
+<!-- PWA: register the service worker for full offline support -->
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./sw.js').catch(()=>{});
+    });
+  }
+</script>
+</body>
+</html>

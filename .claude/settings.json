@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(echo \"== remaining \\\\\\\\u2014 occurrences \\(all should be inside JS string literals, none in HTML body\\) ==\")",
+      "Bash(grep -n '\\\\\\\\u2014' coach_local.html)",
+      "Bash(node -e 'const fs=require\\(\"fs\"\\);const h=fs.readFileSync\\(\"coach_local.html\",\"utf8\"\\);const m=h.match\\(/<script type=\"module\">\\([\\\\s\\\\S]*?\\)<\\\\/script>/\\);let js=m[1].replace\\(/^\\\\s*import .*$/mg,\"\"\\);require\\(\"vm\"\\).compileFunction\\(js,[],{}\\);console.log\\(\"OK\"\\);')",
+      "Bash(mkdir -p vendor icons)",
+      "Bash(curl -sL \"https://cdn.jsdelivr.net/npm/chessground@9.2.1/dist/chessground.min.js\" -o vendor/chessground.min.js)",
+      "Bash(curl -sL \"https://cdn.jsdelivr.net/npm/chess.js@1.4.0/dist/esm/chess.js\" -o vendor/chess.js)",
+      "Bash(curl -sL \"https://cdn.jsdelivr.net/npm/chessground@9.2.1/assets/chessground.base.css\" -o vendor/chessground.base.css)",
+      "Bash(curl -sL \"https://cdn.jsdelivr.net/npm/chessground@9.2.1/assets/chessground.cburnett.css\" -o vendor/chessground.cburnett.css)",
+      "Bash(grep -oE \"\\(import|from\\)[^;]{0,60}\" vendor/chessground.min.js)",
+      "Bash(grep -oE \"export[^;]{0,80}\" vendor/chess.js)",
+      "Bash(grep -rn \"coach_local\" . --include=*.html --include=*.js --include=*.json)",
+      "Bash(grep -nE \"\\\\\"/|'/|href=\\\\\"/|src=\\\\\"/\" sw.js manifest.json)"
+    ]
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "name": "Chess Coach",
+  "short_name": "Coach",
+  "description": "Offline chess coach with Stockfish and scan-question coaching.",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#15201e",
+  "theme_color": "#15201e",
+  "start_url": "index.html",
+  "scope": "./",
+  "icons": [
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
