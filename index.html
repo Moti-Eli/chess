@@ -46,8 +46,8 @@
   .status .turnchip.w{background:#f4f0e6;} .status .turnchip.b{background:#1c2226;}
   .status.check{color:var(--gold);} .status.over{color:var(--green);}
 
-  /* board frame */
-  .frame{background:var(--bg2);padding:9px;border-radius:14px;border:1px solid var(--line);box-shadow:0 14px 40px rgba(0,0,0,.4);}
+  /* board frame — extra left/bottom padding forms the gutters that hold the coordinate labels */
+  .frame{background:var(--bg2);padding:9px 9px 22px 22px;border-radius:14px;border:1px solid var(--line);box-shadow:0 14px 40px rgba(0,0,0,.4);}
   .board{width:min(92vw,420px);height:min(92vw,420px);}
 
   /* ---- our board: crisp SVG checkerboard (perfect squares, our palette) ---- */
@@ -62,6 +62,26 @@
   cg-board square.last-move{background:rgba(224,177,90,.28);}
   cg-board square.selected{background:rgba(224,177,90,.45);}
   cg-board square.check{background:radial-gradient(rgba(224,138,120,.9) 30%, rgba(224,138,120,0) 70%);}
+
+  /* ---- coordinate labels (a–h, 1–8) ----
+     Two bugs in chessground's vendored base.css defaults: (1) coords get no color, so they
+     inherited the page's cream --ink and vanished on the light squares — only labels landing on
+     dark squares showed; (2) the file row is offset by left:24px, so a–h didn't line up under
+     their squares. We override, scoped to #board.cg-wrap (an id beats base.css's class selectors,
+     so this wins without editing the vendored file), and move both rows OUT of the playing
+     squares into the frame gutters (the .frame left/bottom padding above) so they never overlap
+     pieces: ranks centered against each square down the left, files centered under each square
+     along the bottom. The gutters are dark frame, so the light fill + dark outline stays legible. */
+  #board.cg-wrap coords{
+    color:#f4efe1; opacity:1;
+    font-family:"JetBrains Mono",monospace; font-weight:700; font-size:10px;
+    text-shadow:0 0 1px #11181a, 0 0 2px #11181a, 0 1px 2px rgba(0,0,0,.85);
+  }
+  /* ranks 1–8 in the left gutter, one per square, vertically centered */
+  #board.cg-wrap coords.ranks{ left:-16px; top:0; height:100%; width:14px; flex-flow:column-reverse; text-align:center; }
+  #board.cg-wrap coords.ranks coord{ transform:none; display:flex; align-items:center; justify-content:center; }
+  /* files a–h in the bottom gutter, one per square, horizontally centered */
+  #board.cg-wrap coords.files{ left:0; bottom:-18px; width:100%; height:16px; text-align:center; }
 
   .controls{width:100%;max-width:440px;margin-top:14px;display:flex;gap:9px;}
   .btn{flex:1;background:var(--bg2);border:1px solid var(--line);color:var(--ink);border-radius:11px;padding:12px;font-family:inherit;font-size:14px;font-weight:600;cursor:pointer;transition:all .16s;}
@@ -79,32 +99,25 @@
   .err{color:var(--red);}
 
   /* coach card */
-  .coachwrap{width:100%;max-width:440px;margin-top:12px;min-height:var(--card-h);}
-  .qgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
-  /* fixed footprint: question pair and the full-width challenge all occupy exactly --card-h, so
-     switching between them causes zero vertical jump. Overflow is clipped rather than growing. */
-  .ccard{background:var(--panel,#21302d);border:1px solid var(--line);border-radius:13px;padding:13px;display:flex;flex-direction:column;gap:10px;transition:border-color .2s;height:var(--card-h);overflow:hidden;}
-  .ccard .ceyebrow{font-size:10px;letter-spacing:1.6px;text-transform:uppercase;color:var(--gold);}
-  .ccard .yn{display:flex;gap:6px;}
-  .ccard .yn button{flex:1;background:var(--bg2);border:1px solid var(--line);color:var(--ink-dim);border-radius:8px;padding:8px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;transition:all .16s;}
-  .ccard .yn button:hover{border-color:rgba(255,255,255,.22);}
-  .ccard .yn button:focus-visible{outline:2px solid var(--gold);outline-offset:1px;}
-  .ccard .yn button.sel{background:#273935;color:var(--ink);border-color:rgba(255,255,255,.35);}
-  .ccard .yn button.good{background:rgba(123,189,91,.16);border-color:var(--green);color:var(--green);}
-  .ccard .yn button:disabled{cursor:default;opacity:1;}  /* (M2) locked after the move; keep reveal crisp */
-  .ccard .yn button.bad{background:rgba(224,138,120,.16);border-color:var(--red);color:var(--red);}
-  .ccard .qtext{font-size:15px;font-weight:500;line-height:1.3;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;line-clamp:3;overflow:hidden;}
-  .ccard .cfeedback{font-size:12px;line-height:1.45;display:none;overflow:hidden;}
-  .ccard.revealed .cfeedback{display:block;}
-  .ccard.right{border-color:rgba(123,189,91,.45);} .ccard.right .cfeedback{color:var(--green);}
-  .ccard.wrong{border-color:rgba(224,138,120,.45);} .ccard.wrong .cfeedback{color:var(--red);}
-  /* best-move challenge (gold) */
-  .ccard.challenge{background:linear-gradient(150deg,rgba(224,177,90,.16),rgba(224,177,90,.05));border-color:rgba(224,177,90,.5);}
-  .ccard.challenge.right{border-color:var(--green);}
-  .ccard.challenge.wrong{border-color:var(--gold);}
-  /* open-ended note prompt (no buttons): smaller text, more lines, since there's no Yes/No or feedback */
-  .ccard.note{justify-content:flex-start;background:var(--bg2);}
-  .ccard.note .qtext{font-size:13px;line-height:1.4;-webkit-line-clamp:7;line-clamp:7;color:var(--ink);}
+  .coachwrap{width:100%;max-width:440px;margin-top:12px;min-height:0;}
+  /* slim "Find the best move" panel (replaces the old question cards) */
+  .findbar{display:flex;align-items:center;gap:10px;background:var(--panel,#21302d);
+    border:1px solid var(--line);border-radius:11px;padding:11px 14px;
+    font-size:14px;font-weight:600;color:var(--ink);}
+  .findbar .fb-text{flex:1;}
+  .findbar .fb-badge{width:22px;height:22px;border-radius:7px;flex:0 0 auto;display:grid;
+    place-items:center;font-size:15px;font-weight:800;line-height:1;
+    background:linear-gradient(150deg,var(--gold),#c8923f);color:#1a1408;}
+  .findbar.critical{background:linear-gradient(150deg,rgba(224,177,90,.18),rgba(224,177,90,.05));
+    border-color:rgba(224,177,90,.6);color:var(--gold);}
+  /* revealed top-2 moves (after the human plays): slim two-row list */
+  .findbar.revealed{flex-direction:column;align-items:stretch;gap:3px;padding:9px 14px;}
+  .findbar .fb-list{display:flex;flex-direction:column;gap:3px;width:100%;}
+  .findbar .fb-row{display:flex;align-items:center;gap:9px;font-size:13px;font-weight:600;}
+  .findbar .fb-rank{color:var(--ink-dim);width:13px;flex:0 0 auto;}
+  .findbar .fb-mv{font-family:"JetBrains Mono",monospace;font-weight:700;color:var(--ink);}
+  .findbar .fb-sc{margin-left:auto;font-family:"JetBrains Mono",monospace;font-weight:700;color:var(--ink-dim);}
+  .findbar .fb-row.top .fb-sc{color:var(--green);}
   /* graduated-hint message line */
   .hintmsg{width:100%;max-width:440px;margin-top:8px;font-size:13px;font-weight:600;color:var(--gold);text-align:center;}
   .hintmsg[hidden]{display:none;}
@@ -273,14 +286,6 @@
         </div>
       </div>
 
-      <div class="field">
-        <div class="flabel">Scan mode</div>
-        <div class="seg" id="segScan">
-          <button type="button" data-v="locked" class="sel">Locked</button>
-          <button type="button" data-v="open">Open</button>
-        </div>
-      </div>
-
       <div class="modal-actions">
         <button class="btn ghost" id="ngCancel" type="button">Cancel</button>
         <button class="btn go" id="ngPlay" type="button">Play</button>
@@ -381,171 +386,11 @@
   startEngine();
   /* ====================================================================================== */
 
-  /* ============================ COACHING LAYER ============================ */
-  // Each category is a self-contained object. To add/edit a question later,
-  // just add or change one entry here — the renderer below stays untouched.
-  //
-  //   id       : unique key
-  //   question : text shown on the card
-  //   truth(fen): deterministic — is the answer really "yes" in this position?
-  //   feedback : 4 messages keyed by (answer × correctness)
-
-  function freshChess(fen){ return new Chess(fen); }
-
-  // ---- helpers ----
-  function kingSquare(c, color){
-    for (const row of c.board()) for (const sq of row)
-      if (sq && sq.type === 'k' && sq.color === color) return sq.square;
-    return null;
-  }
-  function neighbors(square){
-    const f = square.charCodeAt(0), r = +square[1], out = [];
-    for (let df=-1; df<=1; df++) for (let dr=-1; dr<=1; dr++){
-      if (!df && !dr) continue;
-      const nf=f+df, nr=r+dr;
-      if (nf>=97 && nf<=104 && nr>=1 && nr<=8) out.push(String.fromCharCode(nf)+nr);
-    }
-    return out;
-  }
-  function flipFen(fen){ const p=fen.split(' '); p[1]=p[1]==='w'?'b':'w'; p[3]='-'; return p.join(' '); }
-  const PIECE_VAL = { p:1, n:3, b:3, r:5, q:9, k:100 };
-
-  // ---- TRUTH (deterministic: is the answer really "yes"?) ----
-  function truthHanging(fen){
-    const c = freshChess(fen);
-    const caps = c.moves({ verbose:true }).filter(m => m.flags.includes('c') || m.flags.includes('e'));
-    for (const m of caps){
-      const sim = freshChess(fen); sim.move({ from:m.from, to:m.to, promotion:'q' });
-      const recapture = sim.moves({ verbose:true }).some(r => r.to===m.to && (r.flags.includes('c')||r.flags.includes('e')));
-      if (!recapture) return true;
-    }
-    return false;
-  }
-  function truthCheck(fen){
-    return freshChess(fen).moves({ verbose:true }).some(m => m.san.includes('+') || m.san.includes('#'));
-  }
-  function truthMyHanging(fen){
-    if (freshChess(fen).isCheck()) return false;   // (M3) flipping while in check is illegal; safe default
-    let fl; try { fl = freshChess(flipFen(fen)); } catch(e){ return false; }
-    const caps = fl.moves({ verbose:true }).filter(m => m.flags.includes('c') || m.flags.includes('e'));
-    for (const m of caps){
-      const sim = freshChess(flipFen(fen));
-      try { sim.move({ from:m.from, to:m.to, promotion:'q' }); } catch(e){ continue; }
-      const recapture = sim.moves({ verbose:true }).some(r => r.to===m.to && (r.flags.includes('c')||r.flags.includes('e')));
-      if (!recapture) return true;
-    }
-    return false;
-  }
-
-  // ---- HEAT (how much this position is worth scanning for the category — never reveals the answer) ----
-  function heatCheck(fen){
-    const c = freshChess(fen);
-    const ek = kingSquare(c, 'b'); if (!ek) return 20;
-    const zone = new Set([ek, ...neighbors(ek)]);
-    const pressure = c.moves({ verbose:true }).filter(m => zone.has(m.to)).length;
-    return Math.min(100, 20 + pressure*20);
-  }
-  function heatEnemyHang(fen){
-    const caps = freshChess(fen).moves({ verbose:true }).filter(m => m.flags.includes('c')||m.flags.includes('e')).length;
-    return Math.min(100, 15 + caps*18);
-  }
-  function heatMyHang(fen){
-    if (freshChess(fen).isCheck()) return 15;      // (M3) avoid flipping an in-check position; base value
-    let fl; try { fl = freshChess(flipFen(fen)); } catch(e){ return 15; }
-    const caps = fl.moves({ verbose:true }).filter(m => m.flags.includes('c')||m.flags.includes('e')).length;
-    return Math.min(100, 15 + caps*18);
-  }
-
-  // --- opponent threatens a check on you next move ---
-  function truthOppCheck(fen){
-    if (freshChess(fen).isCheck()) return false;   // (M3) flipping while in check is illegal; safe default
-    let fl; try { fl = freshChess(flipFen(fen)); } catch(e){ return false; }
-    return fl.moves({ verbose:true }).some(m => m.san.includes('+') || m.san.includes('#'));
-  }
-  function heatOppCheck(fen){
-    if (freshChess(fen).isCheck()) return 20;      // (M3) avoid flipping an in-check position; base value
-    let fl; try { fl = freshChess(flipFen(fen)); } catch(e){ return 20; }
-    const mk = kingSquare(fl, 'w'); if (!mk) return 20;        // my king (white)
-    const zone = new Set([mk, ...neighbors(mk)]);
-    const pressure = fl.moves({ verbose:true }).filter(m => zone.has(m.to)).length;
-    return Math.min(100, 20 + pressure*20);
-  }
-
-  // --- you still have an undeveloped minor piece on its starting square ---
-  function truthUndeveloped(fen){
-    const c = freshChess(fen);
-    const homes = { b:['c1','f1'], n:['b1','g1'] };  // white minors' home squares
-    for (const row of c.board()) for (const sq of row){
-      if (!sq || sq.color !== 'w') continue;
-      const h = homes[sq.type];
-      if (h && h.includes(sq.square)) return true;
-    }
-    return false;
-  }
-  function heatUndeveloped(fen){
-    const c = freshChess(fen);
-    const homes = { b:['c1','f1'], n:['b1','g1'] };
-    let n = 0;
-    for (const row of c.board()) for (const sq of row)
-      if (sq && sq.color==='w' && homes[sq.type] && homes[sq.type].includes(sq.square)) n++;
-    return Math.min(100, 15 + n*22);   // hot early (pieces home), cools as you develop
-  }
-
-  // ---- category registry: add/edit one object to change a question ----
-  const COACH_CATEGORIES = [
-    { id:'hanging', base:10, question:'Can you capture a hanging piece?', truth:truthHanging, heat:heatEnemyHang,
-      feedback:{ yesRight:'Yes — there is a free capture. Grab it.',
-                 yesWrong:'Not quite — every piece you can take is defended.',
-                 noRight:'Right — nothing is hanging; everything is defended.',
-                 noWrong:'Look again — there is an undefended piece you can take.' } },
-    { id:'check', base:10, question:'Do you have a check?', truth:truthCheck, heat:heatCheck,
-      feedback:{ yesRight:'Yes — a check is available. Always look at checks first.',
-                 yesWrong:'No legal check here, but good that you looked.',
-                 noRight:'Right — no check available right now.',
-                 noWrong:'There is a check — scan every way to hit the king.' } },
-    { id:'myhang', base:10, question:'Do you have a piece your opponent can take for free?', truth:truthMyHanging, heat:heatMyHang,
-      feedback:{ yesRight:'Yes — one of your pieces is hanging. Defend it or move it.',
-                 yesWrong:'Actually all your pieces are safe right now.',
-                 noRight:'Right — nothing of yours is hanging.',
-                 noWrong:'One of your pieces is undefended and attacked — spot it.' } },
-    { id:'oppcheck', base:8, question:'Can your opponent check you next move?', truth:truthOppCheck, heat:heatOppCheck,
-      feedback:{ yesRight:'Yes — a check is coming. Make sure you can meet it.',
-                 yesWrong:'No check against you right now, but worth checking.',
-                 noRight:'Right — your king is safe from checks for now.',
-                 noWrong:'There is a check available to your opponent — find it.' } },
-    { id:'develop', base:6, question:'Do you still have an undeveloped minor piece?', truth:truthUndeveloped, heat:heatUndeveloped,
-      feedback:{ yesRight:'Yes — a knight or bishop is still home. Get it into play.',
-                 yesWrong:'Your minor pieces are all developed already.',
-                 noRight:'Right — your minors are developed.',
-                 noWrong:'A knight or bishop is still on its starting square.' } },
-
-    // ---- open-ended NOTE prompts (no truth, no grading — pure thinking cues) ----
-    { id:'open_principles', type:'note', base:6,
-      text:'Opening principles: develop your pieces, control the center, and castle your king to safety.',
-      heat:(fen)=>{ const fm = +(fen.split(' ')[5] || 1); return fm <= 5 ? 80 : 5; } },
-    { id:'plan', type:'note', base:5,
-      text:'What’s your plan for the next two or three moves?', heat:()=>10 },
-    { id:'opp_intent', type:'note', base:5,
-      text:'If you do nothing, what is your opponent trying to do?', heat:()=>10 },
-    { id:'worst_piece', type:'note', base:5,
-      text:'Which of your pieces is doing the least right now?', heat:()=>10 },
-    { id:'predict', type:'note', base:5,
-      text:'Before you move — what will your opponent play in reply?', heat:()=>10 }
-  ];
-
-  // weighted pick of TWO distinct categories (score = base + heat)
-  function pickTwo(fen){
-    const pool = COACH_CATEGORIES.map(cat => ({ cat, score: cat.base + cat.heat(fen) }));
-    function draw(arr){
-      const total = arr.reduce((s,x)=>s+x.score, 0);
-      let r = Math.random()*total;
-      for (let i=0;i<arr.length;i++){ r -= arr[i].score; if (r<=0) return i; }
-      return arr.length-1;
-    }
-    const picks = [];
-    for (let n=0; n<2 && pool.length; n++){ const i = draw(pool); picks.push(pool[i].cat); pool.splice(i,1); }
-    return picks;
-  }
+  /* ============================ COACH AREA ============================ */
+  // The question/coaching system (categories, truth/heat scoring, pickTwo, the
+  // yes/no & note cards, and the Locked/Open scan-lock) was removed. Each human
+  // turn now shows a single slim "Find the best move" panel (built below), marked
+  // critical when the analyst's best move clearly beats the second-best.
 
   const coachEl = document.getElementById('coach');
 
@@ -585,8 +430,8 @@
         if (gen === analystGen && analystResolve){
           const s = analystScores; analystScores = {};
           const res = { bestUci: line.split(' ')[1],
-                        c1: s[1] ? s[1].cp : null,
-                        c2: s[2] ? s[2].cp : null };
+                        c1: s[1] ? s[1].cp : null, m1: s[1] ? s[1].move : null,
+                        c2: s[2] ? s[2].cp : null, m2: s[2] ? s[2].move : null };
           const f = analystResolve; analystResolve = null; f(res);
         } else {
           analystScores = {};
@@ -613,104 +458,83 @@
 
   /* ---- coach state ---- */
   let coachTurn = 0;            // increments each time it becomes the human's turn
-  let activeChallenge = null;   // {move:uci} when this turn is a best-move challenge
+  let activeChallenge = null;   // {move:uci} on a critical turn (used by the Hint button)
+  window.bestMoves = [];        // [{uci, scoreCp}] White-POV, analyst's top 2 for the live human position
+  window.bestMovesFen = null;   // the FEN those bestMoves were computed for (for SAN + hint after the move lands)
+  let panelRevealed = false;    // true once this turn's panel shows the top-2 reveal (vs the prompt)
+  let revealWaiting = null;     // coachTurn awaiting reveal because the user moved before the analyst finished
+
+  function humanChar(){ return (window.humanColor === 'black') ? 'b' : 'w'; }
 
   function renderCoach(){
-    if (chess.isGameOver()){ coachEl.innerHTML = ''; activeChallenge = null; return; }
-    if (chess.turn() !== 'w') return;          // opponent's turn: leave the card as-is
+    if (chess.isGameOver()){ coachEl.innerHTML = ''; activeChallenge = null; window.bestMoves = []; return; }
+    if (chess.turn() !== humanChar()) return;   // opponent's turn: leave the panel as-is
     coachTurn++;
     const myTurn = coachTurn;
     activeChallenge = null;
-    buildQuestionCard();                       // show a normal question immediately
-    maybeChallenge(chess.fen(), myTurn);       // may upgrade this turn to a challenge
+    window.bestMoves = [];
+    window.bestMovesFen = null;
+    panelRevealed = false;                      // new turn: back to the prompt
+    revealWaiting = null;
+    buildPromptPanel(false);                    // slim prompt immediately (normal styling)
+    runAnalysis(chess.fen(), myTurn);           // analyst may upgrade this turn to "critical"
   }
 
-  function buildQuestionCard(){
-    const cats = pickTwo(chess.fen());
-    const grid = document.createElement('div');
-    grid.className = 'qgrid';
-    coachEl.innerHTML = '';
-    coachEl.appendChild(grid);
-    cats.forEach(cat => grid.appendChild(makeCard(cat)));
+  // slim "Find the best move" panel; `critical` adds the gold accent + "!" badge
+  function buildPromptPanel(critical){
+    coachEl.innerHTML =
+      '<div class="findbar' + (critical ? ' critical' : '') + '">' +
+        (critical ? '<span class="fb-badge">!</span>' : '') +
+        '<span class="fb-text">Find the best move</span>' +
+      '</div>';
   }
 
-  function makeCard(cat){
-    const card = document.createElement('div');
-    card.className = 'ccard';
-    card._cat = cat;            // (additive) remember category for the passive reveal of unanswered cards
-
-    // (NEW) open-ended note card: lightbulb + text, no Yes/No, no grading
-    if (cat.type === 'note'){
-      card.classList.add('note');
-      card.innerHTML =
-        '<div class="ceyebrow">&#128161; Note</div>' +
-        '<div class="qtext">' + cat.text + '</div>';
-      return card;
+  // ---- reveal of the top-2 moves + evals (after the human plays, or after the 2-press hint) ----
+  // format White-POV centipawns like a chess eval: "+1.2" / "-0.5", or mate as "#3" / "-#2"
+  function fmtScore(cp){
+    if (cp == null) return '';
+    const mag = Math.abs(cp);
+    if (mag > MATE_VAL - 1000){                 // mate-encoded score (MATE_VAL - movesToMate)
+      const mateIn = MATE_VAL - mag;
+      return (cp > 0 ? '#' : '-#') + mateIn;
     }
-
-    // yes/no scan card (unchanged behaviour)
-    card.innerHTML =
-      '<div class="yn"><button data-v="yes">Yes</button><button data-v="no">No</button></div>' +
-      '<div class="qtext">' + cat.question + '</div>' +
-      '<div class="cfeedback"></div>';
-    card._answered = false;     // (additive) flips true once the user grades this card
-    const fb = card.querySelector('.cfeedback');
-    const btns = card.querySelectorAll('.yn button');
-    btns.forEach(b => b.addEventListener('click', ()=>{
-      card._answered = true;    // (additive) mark answered so the reveal skips it
-      const said = b.dataset.v === 'yes';
-      const isTrue = cat.truth(chess.fen());
-      const correct = (said === isTrue);
-      btns.forEach(x => x.classList.remove('sel','good','bad'));
-      b.classList.add('sel', correct ? 'good' : 'bad');
-      card.classList.remove('right','wrong');
-      card.classList.add('revealed', correct ? 'right' : 'wrong');
-      fb.textContent = said
-        ? (correct ? cat.feedback.yesRight : cat.feedback.yesWrong)
-        : (correct ? cat.feedback.noRight  : cat.feedback.noWrong);
-      if (window.afterCardAnswered) window.afterCardAnswered();   // (scan-lock) re-check unlock
-    }));
-    return card;
+    const pawns = cp / 100;
+    return (pawns >= 0 ? '+' : '') + pawns.toFixed(1);
+  }
+  // readable move text: SAN via a throwaway chess.js clone of the analysed position, else the raw uci
+  function uciToSan(uci){
+    try {
+      const tmp = new Chess(window.bestMovesFen || chess.fen());
+      const m = tmp.move({ from:uci.slice(0,2), to:uci.slice(2,4), promotion: uci.length>4 ? uci[4] : 'q' });
+      return m ? m.san : uci;
+    } catch(e){ return uci; }
+  }
+  function renderReveal(){
+    const bm = (window.bestMoves || []).slice(0, 2);
+    if (!bm.length){ buildPromptPanel(false); return; }
+    const rows = bm.map((m, i) =>
+      '<div class="fb-row' + (i === 0 ? ' top' : '') + '">' +
+        '<span class="fb-rank">' + (i+1) + '.</span>' +
+        '<span class="fb-mv">' + uciToSan(m.uci) + '</span>' +
+        '<span class="fb-sc">' + fmtScore(m.scoreCp) + '</span>' +
+      '</div>').join('');
+    coachEl.innerHTML = '<div class="findbar revealed"><div class="fb-list">' + rows + '</div></div>';
+  }
+  // called right after the human's move lands (their move applied; opponent to move). bestMoves still
+  // hold the pre-move analysis. If the analyst hasn't finished, show "Analyzing…" and reveal on arrival.
+  function revealPanel(){
+    if (window.bestMoves && window.bestMoves.length){
+      panelRevealed = true; revealWaiting = null; renderReveal();
+    } else {
+      panelRevealed = false; revealWaiting = coachTurn;
+      coachEl.innerHTML = '<div class="findbar"><span class="fb-text">Analyzing…</span></div>';
+    }
   }
 
-  // (additive) educational reveal: for each shown YES/NO scan card the user did NOT answer this turn,
-  // paint the correct button green — passively (no sel/right/wrong, no feedback text). Reuses the
-  // category's existing truth() on the pre-move position. Challenge cards (no Yes/No) are skipped.
-  // Cleared automatically next turn when buildQuestionCard() replaces the cards.
-  function revealUnanswered(fen){
-    coachEl.querySelectorAll('.ccard').forEach(card => {
-      if (card.classList.contains('challenge')) return;   // best-move challenge has no Yes/No
-      if (card._answered || !card._cat) return;            // answered cards stay exactly as they are
-      if (card._cat.type === 'note') return;               // note prompts have nothing to reveal
-      const want = card._cat.truth(fen) ? 'yes' : 'no';
-      const btn = card.querySelector('.yn button[data-v="'+want+'"]');
-      if (btn) btn.classList.add('good');                  // same green styling as a correct answer
-    });
-  }
-
-  function buildChallengeCard(){
-    coachEl.innerHTML =
-      '<div class="ccard challenge">' +
-        '<div class="ceyebrow" style="color:var(--gold)">Critical position</div>' +
-        '<div class="qtext">There\u2019s a strong move here \u2014 find it on the board.</div>' +
-        '<div class="cfeedback"></div>' +
-      '</div>';
-  }
-
-  function showChallengeResult(challenge, playedUci){
-    const correct = playedUci.slice(0,4) === challenge.move.slice(0,4);
-    coachEl.innerHTML =
-      '<div class="ccard challenge revealed ' + (correct?'right':'wrong') + '">' +
-        '<div class="ceyebrow" style="color:var(--gold)">Critical position</div>' +
-        '<div class="qtext">' + (correct ? 'You found it.' : 'That wasn\u2019t the strongest move.') + '</div>' +
-        '<div class="cfeedback" style="display:block">' +
-          (correct ? 'Best move played \u2014 nicely spotted.'
-                   : 'The engine preferred a sharper move here.') +
-        '</div>' +
-      '</div>';
-  }
-
-  async function maybeChallenge(fen, myTurn){
+  // Run the analyst (MultiPV 2) on the human's position every turn: store the top two
+  // moves as White-POV centipawns in window.bestMoves and mark the panel critical when
+  // the best move clearly beats the second-best. Reuses the analyst's generation guards.
+  async function runAnalysis(fen, myTurn){
     if (analystDead) return;
     if (!analystReady){
       const t0 = Date.now();
@@ -719,11 +543,18 @@
     if (analystDead || myTurn !== coachTurn) return;
     let res; try { res = await analyze(fen); } catch(e){ return; }
     if (myTurn !== coachTurn) return;                  // user already moved on
+    const toWhite = (chess.turn() === 'w') ? 1 : -1;   // analyst cp is from side-to-move POV
+    const bm = [];
+    if (res.c1 != null && res.m1) bm.push({ uci: res.m1, scoreCp: res.c1 * toWhite });
+    if (res.c2 != null && res.m2) bm.push({ uci: res.m2, scoreCp: res.c2 * toWhite });
+    window.bestMoves = bm;
+    window.bestMovesFen = fen;
+    // gap is measured side-to-move POV (c1 is always the best for the mover) — colour-agnostic
     const critical = res.c1 != null && (res.c2 == null || (res.c1 - res.c2) >= CRIT_THRESHOLD);
-    if (critical && res.bestUci && res.bestUci !== '(none)'){
-      activeChallenge = { move: res.bestUci };
-      buildChallengeCard();
-    }
+    if (critical && res.bestUci && res.bestUci !== '(none)') activeChallenge = { move: res.bestUci };
+    if (panelRevealed) return;                          // reveal already showing; leave it
+    if (revealWaiting === myTurn){ revealWaiting = null; panelRevealed = true; renderReveal(); return; }
+    buildPromptPanel(critical);                         // refresh the prompt (adds the gold "!" when critical)
   }
   /* ======================================================================= */
 
@@ -779,21 +610,16 @@
     renderCoach();
   }
 
-  // user (white) made a move on the board
+  // user made a move on the board
   function onUserMove(from, to){
-    const challenge = activeChallenge;          // snapshot before the turn advances
-    const playedUci = from + to;
-    const preFen = chess.fen();                 // (additive) position the shown cards refer to
     let move;
     try { move = chess.move({ from, to, promotion:'q' }); }  // (C1) chess.js 1.4 throws on illegal
     catch(e){ syncBoard(); return; }
     if (!move){ syncBoard(); return; }
-    revealUnanswered(preFen);                    // (additive) passively reveal unanswered scan cards
-    coachEl.querySelectorAll('.yn button').forEach(b => b.disabled = true);  // (M2) lock grading after the move
-    syncBoard();                                 // board updates; coach card left as-is (opponent turn)
-    if (challenge) showChallengeResult(challenge, playedUci);  // overwrite card with result
+    syncBoard();                                 // board updates (renderCoach early-returns: opponent's turn)
+    revealPanel();                               // reveal the top-2 for the position just moved from
     if (chess.isGameOver()) return;
-    cg.set({ movable:{ color:'white', dests:new Map() } });
+    cg.set({ movable:{ color: window.humanColor || 'white', dests:new Map() } });
     setTimeout(opponentMove, 350);
   }
 
@@ -965,14 +791,12 @@
      workers, COACH_CATEGORIES, truth()/heat(), pickTwo(), challenge detection, or chess.js move handling. */
   (function(){
     // session-only prefs (no localStorage yet — that's the packaging step)
-    window.gamePrefs  = window.gamePrefs || { color:'random', time:'unlimited', scanMode:'locked' };
-    window.scanMode   = window.gamePrefs.scanMode;   // remembered only; no locking behavior yet
+    window.gamePrefs  = window.gamePrefs || { color:'random', time:'unlimited' };
     window.humanColor = 'white';
 
     const backdrop = document.getElementById('ngBackdrop');
     const segColor = document.getElementById('segColor');
     const segTime  = document.getElementById('segTime');
-    const segScan  = document.getElementById('segScan');
 
     function bindSeg(seg, key){
       seg.querySelectorAll('button').forEach(b=>{
@@ -980,14 +804,13 @@
           seg.querySelectorAll('button').forEach(x=>x.classList.remove('sel'));
           b.classList.add('sel');
           window.gamePrefs[key] = b.dataset.v;
-          if (key === 'scanMode') window.scanMode = b.dataset.v;   // store only
         });
       });
     }
-    bindSeg(segColor,'color'); bindSeg(segTime,'time'); bindSeg(segScan,'scanMode');
+    bindSeg(segColor,'color'); bindSeg(segTime,'time');
 
     function selectIn(seg, val){ seg.querySelectorAll('button').forEach(x=>x.classList.toggle('sel', x.dataset.v===val)); }
-    function reflectPrefs(){ selectIn(segColor,gamePrefs.color); selectIn(segTime,gamePrefs.time); selectIn(segScan,gamePrefs.scanMode); }
+    function reflectPrefs(){ selectIn(segColor,gamePrefs.color); selectIn(segTime,gamePrefs.time); }
 
     function openDialog(){ reflectPrefs(); backdrop.hidden = false; }
     function closeDialog(){ backdrop.hidden = true; }
@@ -1047,7 +870,6 @@
       const choice   = gamePrefs.color;
       const resolved = choice === 'random' ? (Math.random() < 0.5 ? 'white' : 'black') : choice;
       window.humanColor = resolved;
-      window.scanMode   = gamePrefs.scanMode;
       setupClocks(gamePrefs.time);   // reset + (re)start the human clock for the new game
       closeDialog();
 
@@ -1184,13 +1006,13 @@
     updateNavButtons();   // initial: Back disabled (no moves yet), Forward disabled (live)
   })();
 
-  /* ===================== HINT LAYER (graduated hints for the gold challenge — display only) =====================
-     Reads the existing activeChallenge (set by the protected challenge detection) and draws annotations with
-     cg.setAutoShapes — it never mutates the game or chess.js. hintLevel resets whenever renderCoach runs
-     (new turn / new card set, and right after the user moves). Does not touch engine/analyst, truth/heat,
-     pickTwo, challenge detection, or move handling. */
+  /* ===================== HINT LAYER (two-press reveal of the best move) =====================
+     Press 1 rings the FROM square of the analyst's best move (window.bestMoves[0]); press 2 plays that
+     move through the normal move path (onUserMove), so the engine then replies and the panel reveals the
+     top 2. The press counter resets every renderCoach (new turn / new game / right after a move). Only
+     acts at the live position on the human's turn — it stands down during Back/Forward review. */
   (function(){
-    let hintLevel = 0;
+    let hintStep = 0;
     const hintBtn = document.getElementById('hintBtn');
     const hintMsg = document.getElementById('hintMsg');
 
@@ -1198,113 +1020,40 @@
     function hideHintMsg(){ if (hintMsg){ hintMsg.textContent = ''; hintMsg.hidden = true; } }
     function clearHintShapes(){ try { cg.setAutoShapes([]); } catch(e){} }
 
-    // classify the challenge move on a CLONE — never mutates the live game
-    function classify(uci){
-      try {
-        const tmp = new Chess(chess.fen());
-        const m = tmp.move({ from:uci.slice(0,2), to:uci.slice(2,4), promotion: uci.length>4 ? uci[4] : 'q' });
-        if (!m) return 'It’s a strong move.';
-        if (m.san.includes('+') || m.san.includes('#')) return 'It’s a check.';
-        if (m.san.includes('x')) return 'It’s a capture.';
-        return 'It’s a quiet move.';
-      } catch(e){ return 'It’s a strong move.'; }
-    }
-
-    function applyHint(){
-      const uci = activeChallenge.move;
-      const from = uci.slice(0,2), to = uci.slice(2,4);
-      if (hintLevel >= 1) showHintMsg(classify(uci));
-      const shapes = [];
-      if (hintLevel >= 2) shapes.push({ orig: from, brush:'green' });            // ring the piece to move
-      if (hintLevel >= 3) shapes.push({ orig: to,   brush:'blue'  });            // ring the destination
-      if (hintLevel >= 4) shapes.push({ orig: from, dest: to, brush:'green' });  // full answer arrow
-      try { cg.setAutoShapes(shapes); } catch(e){}
+    // is it the human's live turn (not reviewing, not over)?
+    function liveHumanTurn(){
+      return !document.body.classList.contains('reviewing')
+          && !chess.isGameOver()
+          && chess.turn() === humanChar();
     }
 
     if (hintBtn) hintBtn.addEventListener('click', ()=>{
-      if (!activeChallenge){ showHintMsg('Hints appear in critical positions.'); return; }
-      hintLevel = Math.min(4, hintLevel + 1);
-      applyHint();
+      if (!liveHumanTurn()) return;
+      const bm = window.bestMoves;
+      if (!bm || !bm.length){ showHintMsg('Analyzing…'); return; }   // analyst not ready: wait, don't advance
+      const uci = bm[0].uci;
+      const from = uci.slice(0,2), to = uci.slice(2,4);
+
+      hintStep++;
+      if (hintStep === 1){
+        try { cg.setAutoShapes([{ orig: from, brush:'green' }]); } catch(e){}   // press 1: ring the from-square
+        showHintMsg('There’s your move — press Hint again to play it.');
+      } else {                                                                   // press 2: play the best move
+        clearHintShapes(); hideHintMsg();
+        onUserMove(from, to);  // run the real move path (syncBoard animates; engine replies; panel reveals top 2)
+      }
     });
 
-    // reset hint state on every render (turn change / new card set, and right after the user moves)
+    // reset the press counter + hint annotations on every render (new turn / new game / post-move)
     const _origRenderCoach = renderCoach;
     renderCoach = function(){
       _origRenderCoach.apply(this, arguments);
-      hintLevel = 0;
+      hintStep = 0;
       hideHintMsg();
       clearHintShapes();
     };
   })();
 
-  /* ===================== SCAN-LOCK LAYER (Locked / Open scan mode — movable gating only) =====================
-     In Locked mode the human's pieces stay un-movable on their LIVE turn until every shown YES/NO scan card is
-     answered (note cards and the gold challenge never block). Re-enabling uses the same computeDests() as today.
-     This only gates `movable`; it never mutates chess.js, the engine/analyst, truth/heat, pickTwo, challenge
-     detection, move-making, or the Back/Forward review layer (it stands down whenever the board is in review). */
-  (function(){
-    const statusEl = document.getElementById('status');
-    const humanChar = ()=> (window.humanColor === 'black') ? 'b' : 'w';
-    const LOCK_TEXT = 'Answer the questions to unlock your move.';
-
-    function pendingYesNo(){
-      let pending = 0;
-      coachEl.querySelectorAll('.ccard').forEach(card => {
-        if (card.classList.contains('challenge')) return;        // challenge has no Yes/No
-        if (!card._cat || card._cat.type === 'note') return;      // notes never require an answer
-        if (!card._answered) pending++;
-      });
-      return pending;
-    }
-
-    // The locked hint lives IN the existing status line (no extra element -> zero layout shift).
-    const isShowingLock = ()=> !!statusEl && statusEl.textContent.indexOf(LOCK_TEXT) !== -1;
-    // mirror of updateStatus()'s normal (non-game-over) line, used only to revert our swap
-    function normalStatus(){
-      const w = chess.turn() === 'w';
-      const chip = '<span class="turnchip ' + (w ? 'w' : 'b') + '"></span> ';
-      if (chess.isCheck()) return { cls:'status check', html: chip + (w ? 'White' : 'Black') + ' to move — check' };
-      return { cls:'status', html: chip + (w ? 'Your move' : 'Opponent thinking…') };
-    }
-    function setStatusLine(showLock){
-      if (!statusEl) return;
-      if (showLock){
-        if (!isShowingLock()){
-          statusEl.className = 'status';
-          statusEl.innerHTML = '<span class="turnchip ' + (chess.turn()==='w'?'w':'b') + '"></span> ' + LOCK_TEXT;
-        }
-      } else if (isShowingLock() && !chess.isGameOver()){
-        const s = normalStatus(); statusEl.className = s.cls; statusEl.innerHTML = s.html;
-      }
-    }
-
-    function applyScanLock(){
-      const reviewing = document.body.classList.contains('reviewing');
-      const humanLiveTurn = !reviewing && !chess.isGameOver() && chess.turn() === humanChar();
-      if (!humanLiveTurn){ setStatusLine(false); return; }          // engine turn / review / over: don't gate
-      const locked = (window.scanMode === 'locked') && pendingYesNo() > 0;
-      if (locked){
-        cg.set({ movable:{ color: window.humanColor || 'white', dests: new Map() } });   // freeze pieces
-        setStatusLine(!chess.isCheck());   // swap "Your move" -> unlock message (leave check lines intact)
-      } else {
-        cg.set({ movable:{ color: window.humanColor || 'white', dests: computeDests() } }); // normal dests
-        setStatusLine(false);
-      }
-    }
-
-    // unlock check fired by a yes/no card's grade click (see makeCard)
-    window.afterCardAnswered = applyScanLock;
-
-    // re-evaluate the lock after every coach render (each new turn / new card set, new game, and post-move)
-    const _rcRender = renderCoach;
-    renderCoach = function(){ _rcRender.apply(this, arguments); applyScanLock(); };
-
-    // a turn can upgrade to the gold challenge after render (no Yes/No) -> must unlock
-    const _origBuildChallengeCard = buildChallengeCard;
-    buildChallengeCard = function(){ _origBuildChallengeCard.apply(this, arguments); applyScanLock(); };
-
-    applyScanLock();   // gate the very first turn (initial render happened before this layer loaded)
-  })();
 </script>
 
 <!-- PWA: register the service worker for full offline support -->
