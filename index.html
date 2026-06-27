@@ -78,6 +78,9 @@
   }
   /* ranks 1–8 in the left gutter, one per square, vertically centered */
   #board.cg-wrap coords.ranks{ left:-16px; top:0; height:100%; width:14px; flex-flow:column-reverse; text-align:center; }
+  /* black-oriented board: flip the rank order (8..1, bottom..top) so labels match the flipped pieces.
+     Needs id-level specificity to beat our own ranks override above (chessground's .black rule can't). */
+  #board.cg-wrap coords.ranks.black{ flex-flow:column; }
   #board.cg-wrap coords.ranks coord{ transform:none; display:flex; align-items:center; justify-content:center; }
   /* files a–h in the bottom gutter, one per square, horizontally centered */
   #board.cg-wrap coords.files{ left:0; bottom:-18px; width:100%; height:16px; text-align:center; }
@@ -192,6 +195,13 @@
   .btn.ghost{background:var(--bg);}
   .btn.go{background:linear-gradient(150deg,var(--green),#5fa047);color:#0f240a;border:none;}
 
+  /* game-over overlay (reuses .modal-backdrop / .modal — centered card over a dim backdrop) */
+  .modal.gameover{max-width:320px;text-align:center;align-items:center;gap:8px;}
+  .modal.gameover .go-title{font-family:"Fraunces",serif;font-weight:600;font-size:32px;line-height:1.12;}
+  .modal.gameover .go-title.win{color:var(--gold);}
+  .modal.gameover .go-sub{font-size:13px;font-weight:600;color:var(--ink-dim);margin-bottom:4px;}
+  .modal.gameover .modal-actions{width:100%;}
+
   /* review (Back / Forward history browser) */
   .toolbar .tbtn:disabled{opacity:.3;cursor:default;}
   .toolbar .tbtn:disabled:hover{color:var(--ink-dim);background:none;}
@@ -300,6 +310,18 @@
       <div class="modal-actions">
         <button class="btn ghost" id="ngCancel" type="button">Cancel</button>
         <button class="btn go" id="ngPlay" type="button">Play</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- game-over overlay: centered result panel shown once when the game ends -->
+  <div class="modal-backdrop" id="goBackdrop" hidden>
+    <div class="modal gameover" role="dialog" aria-modal="true" aria-labelledby="goTitle">
+      <h2 class="go-title" id="goTitle">Game over</h2>
+      <div class="go-sub" id="goSub"></div>
+      <div class="modal-actions">
+        <button class="btn ghost" id="goCloseBtn" type="button">Close</button>
+        <button class="btn go" id="goNewBtn" type="button">New Game</button>
       </div>
     </div>
   </div>
@@ -491,7 +513,7 @@
   let activeChallenge = null;   // {move:uci} on a critical turn (used by the Hint button)
   window.bestMoves = [];        // [{uci, scoreCp}] White-POV, analyst's top 2 for the LIVE human position
   window.bestMovesFen = null;   // the FEN those live bestMoves were computed for (for SAN + the hint)
-  window.alertThreshold = 250;  // fixed cp gap (best vs 2nd-best) needed to flag a "significant move"
+  window.alertThreshold = 20;  // fixed cp gap (best vs 2nd-best) needed to flag a "significant move"
   // Chess tips for the pre-first-move intro — one is picked at random per new game (see pickTip).
   const CHESS_TIPS = [
     "Control the center with your pawns and pieces.",
@@ -514,12 +536,18 @@
   let revealActive = false;     // has the human made at least one move this game (panel in reveal mode)?
   let revealWaitingFen = null;  // (M3) FEN whose analysis a delayed reveal is waiting on — keyed to the position, not the turn
   let revealGen = 0;            // bumped each human move so a late (post-move) eval renders only for the current move
-  let pendingReveal = null;     // {preFen, userUci, userSan, postFen, gen} — context for the Best-vs-You comparison panel
+  let pendingReveal = null;     // {preFen, userUci, userSan, postFen, gen, ply} — context for the Best-vs-You comparison panel
+
+  // Saved per-human-move "Your best move / Your move" comparison records, in ply order. Recorded as each
+  // human move is analysed (buildComparison) and REPLAYED instantly during Back/Forward review — no
+  // recomputation. Each: {ply, preFen, bestUci, bestSan, bestScoreCp, userUci, userSan, userScoreCp, moverWhite}.
+  // ply = chess.history().length right after THIS human move (its resulting ply count). Cleared on New Game,
+  // truncated on takeback. (See logHumanMove / the REVIEW LAYER.)
+  window.moveLog = [];
 
   // ---- review / takeback bridge (managed by the REVIEW LAYER below; read by the core + Hint layer) ----
   // Back/Forward can now park on a PAST position from which the human may play a different move (a takeback).
   const Review = { active:false, humanTurn:false, takeback:null };  // takeback(): rebuild chess to the reviewed ply
-  let reviewAnaGen = 0;         // generation guard for analysing a reviewed position (stale results ignored)
   let resetHint = ()=>{};       // the Hint layer overrides this so navigation/takeback can clear its 2-press state
 
   function humanChar(){ return (window.humanColor === 'black') ? 'b' : 'w'; }
@@ -597,21 +625,37 @@
   function updateAlert(){
     const el = document.getElementById('alertBar');
     if (!el) return;
-    const hide = ()=>{ el.hidden = true; };
-    if (Review.active) return hide();                      // never while reviewing a past position
-    if (chess.isGameOver()) return hide();
-    if (chess.turn() !== humanChar()) return hide();       // only on the human's own live turn
+    // DIAG: compute inputs up front (guarding bm<2) and write a visible readout each call -------------
     const bm = window.bestMoves || [];
-    if (bm.length < 2) return hide();                      // no 2nd move (single legal / mate) -> nothing to compare
-    if (window.bestMovesFen !== chess.fen()) return hide();// analysis must be for the CURRENT live position
-    const s0 = bm[0].scoreCp, s1 = bm[1].scoreCp;
-    if (Math.abs(s0) > MATE_VAL - 1000 || Math.abs(s1) > MATE_VAL - 1000) return hide();  // mate-scored: skip
-    const gap = Math.abs(s0 - s1);                         // side-to-move eval gap (colour-agnostic magnitude)
-    if (gap < (window.alertThreshold || 250)) return hide();
+    const bmLen = bm.length;
+    const fenMatch = (window.bestMovesFen === chess.fen());
+    let s0, s1, gap;
+    if (bmLen >= 2){ s0 = bm[0].scoreCp; s1 = bm[1].scoreCp; gap = Math.abs(s0 - s1); }
+    const setDiag = (outcome)=>{                           // DIAG (temporary on-screen readout)
+      let d = document.getElementById('diagBar');
+      if (!d){
+        d = document.createElement('div'); d.id = 'diagBar';
+        d.style.cssText = 'position:fixed;left:0;right:0;bottom:64px;z-index:60;'+
+          'font:11px/1.3 monospace;color:#1a1408;background:#e0b15a;padding:3px 8px;text-align:center;';
+        document.body.appendChild(d);
+      }
+      d.textContent = 'DIAG s0=' + s0 + ' s1=' + s1 + ' gap=' + gap + ' thr=' + window.alertThreshold +
+        ' bm=' + bmLen + ' fenMatch=' + fenMatch + ' -> ' + outcome;
+    };
+    const hide = (outcome)=>{ el.hidden = true; setDiag(outcome); };   // DIAG: tag each hide reason
+    // ------------------------------------------------------------------------------------------------
+    if (Review.active) return hide('hid:review');          // never while reviewing a past position
+    if (chess.isGameOver()) return hide('hid:over');
+    if (chess.turn() !== humanChar()) return hide('hid:opp-turn');  // only on the human's own live turn
+    if (bmLen < 2) return hide('hid:bm<2');               // no 2nd move (single legal / mate) -> nothing to compare
+    if (!fenMatch) return hide('hid:fen');                // analysis must be for the CURRENT live position
+    if (Math.abs(s0) > MATE_VAL - 1000 || Math.abs(s1) > MATE_VAL - 1000) return hide('hid:mate');  // mate-scored: skip
+    if (gap < (window.alertThreshold || 250)) return hide('hid:gap<thr');
     const pawns = (gap / 100).toFixed(1);                  // e.g. 230cp -> "2.3"
     el.querySelector('.al-text').textContent =
       '⚡ Significant move available — it’s ' + pawns + ' better than the next best. Find it!';
     el.hidden = false;
+    setDiag('SHOWN');                                      // DIAG
   }
   // ---- Best-vs-You comparison panel (shown after the human moves, persists until they move again) ----
   // Two slim lines: the single BEST move (from the pre-move analysis) and the move the USER actually
@@ -636,11 +680,12 @@
   }
   // Render the panel. bestScoreCp/userScoreCp are White-POV; userScoreCp may be null while it's still
   // being computed (shown as "…"). moverWhite tells us which side just moved, so loss is from THAT side.
-  function renderComparison(bestUci, bestSan, bestScoreCp, userUci, userSan, userScoreCp, moverWhite){
+  // review=true swaps the tags to past tense (Back/Forward replay of a saved record) — labels only.
+  function renderComparison(bestUci, bestSan, bestScoreCp, userUci, userSan, userScoreCp, moverWhite, review = false){
     let rows;
     if (userUci === bestUci){
-      // the user played the best move -> collapse to a single green "Best move!" line
-      rows = cmpRow('green', 'Best move!', bestSan, bestScoreCp);
+      // the user played the best move -> collapse to a single green line
+      rows = cmpRow('green', review ? 'You played the best move!' : 'Best move!', bestSan, bestScoreCp);
     } else {
       let youCls = 'dim';
       if (userScoreCp != null){
@@ -648,17 +693,27 @@
         const lossCp = moverWhite ? (bestScoreCp - userScoreCp) : (userScoreCp - bestScoreCp);
         youCls = lossClass(Math.max(0, lossCp) / 100);
       }
-      rows = cmpRow('green', 'Best:', bestSan, bestScoreCp) +
-             cmpRow(youCls, 'You:', userSan, userScoreCp);
+      rows = cmpRow('green', review ? 'Best was:' : 'Your best move:', bestSan, bestScoreCp) +
+             cmpRow(youCls, review ? 'You played:' : 'Your move:', userSan, userScoreCp);
     }
     coachEl.innerHTML = '<div class="findbar revealed"><div class="fb-list">' + rows + '</div></div>';
+  }
+
+  // Upsert a human move's comparison record into window.moveLog, keyed by ply (so a late userScoreCp
+  // update replaces the same entry rather than appending a duplicate). Forward play appends in order;
+  // takeback truncates the tail first, so the array stays sorted by ply.
+  function logHumanMove(rec){
+    if (!window.moveLog) window.moveLog = [];
+    const i = window.moveLog.findIndex(r => r.ply === rec.ply);
+    if (i >= 0) window.moveLog[i] = rec; else window.moveLog.push(rec);
   }
 
   // Build the comparison from the pre-move analysis (bm = top-2 of the position moved FROM). The best
   // move + eval come straight from bm[0]. The user's-move eval is taken from bm when the move is one of
   // the top-2 (already computed); otherwise we read it from a one-shot analyst eval of the resulting
-  // position (the analyst is idle during the opponent's turn). gen guards against a newer move.
-  async function buildComparison(bm, preFen, userUci, userSan, postFen, gen){
+  // position (the analyst is idle during the opponent's turn). gen guards against a newer move. Also
+  // RECORDS the comparison into window.moveLog (keyed by ply) for instant replay during review.
+  async function buildComparison(bm, preFen, userUci, userSan, postFen, gen, ply){
     bm = (bm || []).slice(0, 2);
     const best = bm[0];
     if (!best){ return; }                                  // no analysis at all: leave the panel as-is
@@ -670,16 +725,22 @@
     if (userUci === best.uci) userScoreCp = best.scoreCp;
     else { const hit = bm.find(m => m.uci === userUci); if (hit) userScoreCp = hit.scoreCp; }
 
+    // record now (userScoreCp may still be null for an out-of-top-2 move; filled in below when it lands)
+    logHumanMove({ ply, preFen, bestUci:best.uci, bestSan, bestScoreCp:best.scoreCp,
+                   userUci, userSan, userScoreCp, moverWhite });
     renderComparison(best.uci, bestSan, best.scoreCp, userUci, userSan, userScoreCp, moverWhite);
 
     // not a top-2 move -> read the eval of the resulting position (simplest robust source)
     if (userScoreCp == null && userUci !== best.uci){
       let res; try { res = await analyze(postFen); } catch(e){ res = null; }
-      if (gen !== revealGen) return;                       // a newer move superseded this reveal
       if (res && res.c1 != null){
         const tw = (postFen.split(' ')[1] === 'w') ? 1 : -1;
         userScoreCp = res.c1 * tw;
+        // update the SAME saved record — match on identity so a takeback that reused this ply isn't clobbered
+        const i = window.moveLog.findIndex(r => r.ply === ply && r.preFen === preFen && r.userUci === userUci);
+        if (i >= 0) window.moveLog[i].userScoreCp = userScoreCp;
       }
+      if (gen !== revealGen) return;                       // a newer move superseded this reveal's display
       renderComparison(best.uci, bestSan, best.scoreCp, userUci, userSan, userScoreCp, moverWhite);
     }
   }
@@ -688,13 +749,13 @@
   // FROM; userUci/userSan are the move they played; postFen is the resulting position. The comparison
   // PERSISTS until the human's next move. If the pre-move analysis hadn't finished, show "Analyzing…" and
   // build as soon as that position's analysis arrives (runAnalysis' revealWaitingFen path).
-  function revealPanel(preBM, preFen, userUci, userSan, postFen){
+  function revealPanel(preBM, preFen, userUci, userSan, postFen, ply){
     revealActive = true;                                  // from now on the panel stays in reveal mode
     const gen = ++revealGen;
-    pendingReveal = { preFen, userUci, userSan, postFen, gen };
+    pendingReveal = { preFen, userUci, userSan, postFen, gen, ply };
     if (preBM && preBM.length){
       revealWaitingFen = null;
-      buildComparison(preBM, preFen, userUci, userSan, postFen, gen);
+      buildComparison(preBM, preFen, userUci, userSan, postFen, gen, ply);
     } else {
       revealWaitingFen = preFen;                          // (M3) build once this exact position's analysis lands
       coachEl.innerHTML = '<div class="findbar"><span class="fb-text">Analyzing…</span></div>';
@@ -722,7 +783,7 @@
     if (revealWaitingFen === fen){
       revealWaitingFen = null;
       if (pendingReveal && pendingReveal.preFen === fen){   // build the Best-vs-You comparison now that P is analysed
-        buildComparison(bm, fen, pendingReveal.userUci, pendingReveal.userSan, pendingReveal.postFen, pendingReveal.gen);
+        buildComparison(bm, fen, pendingReveal.userUci, pendingReveal.userSan, pendingReveal.postFen, pendingReveal.gen, pendingReveal.ply);
       } else {
         renderReveal(bm, fen);                              // (fallback) no pending comparison context
       }
@@ -738,29 +799,7 @@
     updateAlert();                                     // this turn's live analysis just landed — flag it if the gap qualifies
   }
 
-  // While REVIEWING a past position, analyse THAT position and show the best move(s) to play from here
-  // (this is what's best NOW, not the previous move's pair). Also stashes them in window.bestMoves so the
-  // Hint button can play the best move straight from the reviewed position. reviewAnaGen guards staleness.
-  async function showReviewAnalysis(fen){
-    const myGen = ++reviewAnaGen;
-    window.bestMoves = []; window.bestMovesFen = fen;
-    coachEl.innerHTML = '<div class="findbar"><span class="fb-text">Best move here…</span></div>';
-    if (analystDead) return;
-    if (!analystReady){
-      const t0 = Date.now();
-      while (!analystReady && !analystDead && Date.now()-t0 < 12000){ await sleep(150); }
-    }
-    if (analystDead || myGen !== reviewAnaGen) return;
-    let res; try { res = await analyze(fen); } catch(e){ return; }
-    if (!res) return;                                   // (M1) request was superseded by a newer one
-    if (myGen !== reviewAnaGen) return;                 // navigated to another ply / went live meanwhile
-    const toWhite = (fen.split(' ')[1] === 'w') ? 1 : -1;   // POV from the REVIEWED position's side to move
-    const bm = [];
-    if (res.c1 != null && res.m1) bm.push({ uci: res.m1, scoreCp: res.c1 * toWhite });
-    if (res.c2 != null && res.m2) bm.push({ uci: res.m2, scoreCp: res.c2 * toWhite });
-    window.bestMoves = bm; window.bestMovesFen = fen;
-    renderReveal(bm, fen);
-  }
+  // (Review no longer recomputes — Back/Forward replays saved window.moveLog records; see the REVIEW LAYER.)
   /* ======================================================================= */
 
   const chess = new Chess();
@@ -841,8 +880,9 @@
       const userUci = move.from + move.to + (move.promotion || '');   // the move the human just played
       const userSan = move.san;
       const postFen = chess.fen();                 // position resulting from the user's move (for its eval)
+      const ply = chess.history().length;          // resulting ply count — the key for this move's saved record
       syncBoard();                                 // board updates (renderCoach early-returns: opponent's turn)
-      revealPanel(preBM, preFen, userUci, userSan, postFen);   // show Best vs You — and keep it up all turn
+      revealPanel(preBM, preFen, userUci, userSan, postFen, ply);   // show Best vs You — and keep it up all turn
       updateAlert();                               // the human moved -> clear the significant-move alert (now opponent's turn)
       if (chess.isGameOver()) return;
       cg.set({ movable:{ color: window.humanColor || 'white', dests:new Map() } });
@@ -913,6 +953,7 @@
   document.getElementById('newBtn').addEventListener('click', ()=>{
     invalidateEngine(); invalidateAnalyst(); invalidateOpponent();   // drop any in-flight/scheduled reply
     revealActive = false; revealWaitingFen = null;  // new game: panel returns to the pre-first-move intro
+    window.moveLog = [];                             // drop the saved per-move comparison records
     currentTip = pickTip();                          // fresh random tip for this game's intro
     chess.reset();
     if (engine && !engineDead){ engine.postMessage('ucinewgame'); engine.postMessage('isready'); } // (2)
@@ -1092,7 +1133,7 @@
       const choice   = gamePrefs.color;
       const resolved = choice === 'random' ? (Math.random() < 0.5 ? 'white' : 'black') : choice;
       window.humanColor = resolved;
-      window.alertThreshold = 250;   // fixed significant-move threshold (the sensitivity control was removed)
+      window.alertThreshold = 20;   // fixed significant-move threshold (the sensitivity control was removed)
       setupClocks(gamePrefs.time);   // reset + (re)start the human clock for the new game
       closeDialog();
 
@@ -1113,12 +1154,17 @@
   })();
 
   /* ===================== REVIEW LAYER (Back / Forward history browser + takeback) =====================
-     Back/Forward step the board through past positions (showing each position's best move via the analyst).
-     From a past position that's the human's turn, the pieces stay movable: playing a move there is a TAKEBACK
-     — Review.takeback() rebuilds chess.js to that ply (chess.undo) and the core onUserMove plays the new move,
-     after which the engine replies and play continues live. syncBoard snaps back to live on any real move. */
+     Back/Forward step the board ONE ply at a time through the FULL history (so a single piece moves per
+     press — yours OR the opponent's), like a normal move browser: boardIdx is an index over the full ply
+     timeline (0 = start position, up to the live ply count), rebuilt by replaying chess.history().
+     The reveal panel + the counter, however, refer ONLY to the human's moves: for the current boardIdx we
+     find the most recent human record (window.moveLog) at or before this ply and REPLAY it (instant, no
+     re-analysis); on an opponent ply (or any ply between two human moves) the panel STICKS to that record.
+     The pieces are movable only on a human-to-move ply, where playing a different move is a TAKEBACK —
+     Review.takeback() rebuilds chess.js to boardIdx + truncates moveLog, then the core onUserMove plays
+     the new move, the engine replies, and play continues live. syncBoard snaps to live on any real move. */
   (function(){
-    let reviewIdx = null;   // null = at live; otherwise an index into the FEN timeline (0 = start position)
+    let boardIdx = null;        // null = at live; otherwise an index over the FULL ply timeline (0 = start)
     let savedPanel = null, savedBM = null, savedFen = null;   // live-reveal snapshot, restored on leaving review
 
     const reviewBar = document.getElementById('reviewBar');
@@ -1127,15 +1173,9 @@
     const fwdBtn    = document.getElementById('fwdBtn');
     const liveBtn   = document.getElementById('reviewLiveBtn');
 
-    const isReviewing = ()=> reviewIdx !== null;
+    const isReviewing = ()=> boardIdx !== null;
+    const logLen = ()=> (window.moveLog ? window.moveLog.length : 0);
 
-    // Build the FEN timeline by replaying the real game's SAN history from the standard start.
-    function timeline(){
-      const tmp = new Chess();
-      const fens = [tmp.fen()];
-      for (const san of chess.history()){ tmp.move(san); fens.push(tmp.fen()); }
-      return fens;
-    }
     // legal-move dests Map for an arbitrary Chess instance (the reviewed position)
     function destsFor(c){
       const dests = new Map();
@@ -1153,50 +1193,75 @@
     }
 
     function updateNavButtons(){
-      const histLen = chess.history().length;
-      const backOn = isReviewing() ? reviewIdx > 0 : histLen > 0;
+      const live = chess.history().length;   // Back steps the FULL ply timeline (not just human moves)
+      const backOn = isReviewing() ? boardIdx > 0 : live > 0;
       const fwdOn  = isReviewing();          // Forward only meaningful while reviewing
       if (backBtn) backBtn.disabled = !backOn;
       if (fwdBtn)  fwdBtn.disabled  = !fwdOn;
     }
 
+    // Render the board at boardIdx (one ply in the full timeline) + the STUCK human-move panel/counter.
     function renderReview(){
-      const fens = timeline();
-      const live = fens.length - 1;          // index of the live position
-      if (reviewIdx >= live){ exitReview(); return; }
-      if (reviewIdx < 0) reviewIdx = 0;
-      const fen = fens[reviewIdx];
-      const tmp = new Chess(fen);
-      const humanTurn = (tmp.turn() === humanChar());   // can the human take back / play from here?
-      let lastMove;
-      if (reviewIdx >= 1){
-        const vh = chess.history({ verbose:true })[reviewIdx-1];
+      const live = chess.history().length;
+      if (boardIdx == null) return;
+      if (boardIdx < 0) boardIdx = 0;
+      if (boardIdx >= live){ exitReview(); return; }   // stepped onto the live position -> go live
+
+      // rebuild the position at boardIdx by replaying the live game's SAN history that far
+      const hist = chess.history();
+      const tmp = new Chess();
+      for (let i = 0; i < boardIdx; i++) tmp.move(hist[i]);
+      const fen = tmp.fen();
+      const humanToMove = (tmp.turn() === humanChar()) && !tmp.isGameOver();   // movable only on my turn
+      let lastMove;                            // highlight the ply that produced this position
+      if (boardIdx >= 1){
+        const vh = chess.history({ verbose:true })[boardIdx - 1];
         if (vh) lastMove = [vh.from, vh.to];
       }
-      // pieces are MOVABLE from a past position when it's the human's turn there; frozen otherwise
       cg.set({
         fen,
         viewOnly: false,
         turnColor: tmp.turn()==='w' ? 'white' : 'black',
         check: tmp.isCheck(),
         lastMove,
-        movable: { color: window.humanColor || 'white', dests: humanTurn ? destsFor(tmp) : new Map() }
+        movable: { color: window.humanColor || 'white', dests: humanToMove ? destsFor(tmp) : new Map() }
       });
       resetHint();                            // clear any stale hint ring/step from the previous ply
       document.body.classList.add('reviewing');
-      Review.active = true; Review.humanTurn = humanTurn;
+      Review.active = true; Review.humanTurn = humanToMove;
       reviewBar.hidden = false;
-      reviewMsg.textContent = 'Reviewing — ' + reviewIdx + ' / ' + live;
+
+      // panel + counter: the human record whose preFen IS this position (rec.ply === boardIdx+1) — i.e. the
+      // move played FROM here (what Forward replays); else STICK to the most recent record at/before it.
+      const total = logLen();
+      let recIdx = -1;
+      for (let i = 0; i < total; i++){ if (window.moveLog[i].ply <= boardIdx + 1) recIdx = i; else break; }
+      if (recIdx >= 0){
+        const rec = window.moveLog[recIdx];
+        renderComparison(rec.bestUci, rec.bestSan, rec.bestScoreCp,   // REPLAY the saved comparison — instant
+                         rec.userUci, rec.userSan, rec.userScoreCp, rec.moverWhite, true);   // review = past tense
+        reviewMsg.textContent = 'Reviewing — your move ' + (recIdx + 1) + ' / ' + total;
+      } else {
+        // before the human's first move (only reachable when playing Black): leave the panel as-is
+        reviewMsg.textContent = 'Reviewing — your move 0 / ' + total;
+      }
+
+      // Hint source: the human move playable FROM here (its record has ply === boardIdx+1) when it's my turn
+      if (humanToMove){
+        const nextRec = window.moveLog.find(r => r.ply === boardIdx + 1);
+        window.bestMoves = nextRec ? [{ uci: nextRec.bestUci, scoreCp: nextRec.bestScoreCp }] : [];
+      } else {
+        window.bestMoves = [];
+      }
+      window.bestMovesFen = fen;
       updateAlert();                          // no significant-move alert while reviewing a past position
-      showReviewAnalysis(fen);                // panel shows the best move(s) to play FROM this position
       updateNavButtons();
     }
 
     function exitReview(){
       if (!isReviewing()) return;
-      reviewIdx = null;
+      boardIdx = null;
       Review.active = false; Review.humanTurn = false;
-      reviewAnaGen++;                          // drop any pending reviewed-position analysis
       document.body.classList.remove('reviewing');
       reviewBar.hidden = true;
       cg.set({ viewOnly: false });
@@ -1207,17 +1272,18 @@
       updateNavButtons();
     }
 
-    // TAKEBACK: rebuild the real game to the reviewed ply (discarding the moves after it). Called by the
-    // core onUserMove the instant the human plays from a past position; onUserMove then makes the new move.
+    // TAKEBACK: rebuild the real game to the reviewed ply (boardIdx) and truncate moveLog to match. Only
+    // reachable from a human-to-move ply (dragging is disabled on opponent plies). Called by the core
+    // onUserMove the instant the human plays from a past position; onUserMove then plays the new move.
     Review.takeback = function(){
-      const target = reviewIdx;                // FEN-timeline index == number of plies to keep
-      if (target == null) return;
+      if (boardIdx == null) return;
+      const target = boardIdx;                 // plies to KEEP (boardIdx is the human-to-move position)
       invalidateOpponent();                    // (C2) cancel the pending engine reply to the old (discarded) line
       const histLen = chess.history().length;
-      for (let i = histLen; i > target; i--) chess.undo();   // pop the discarded line off the real game
-      reviewIdx = null;
+      for (let i = histLen; i > target; i--) chess.undo();    // pop the discarded line off the real game
+      window.moveLog = window.moveLog.filter(r => r.ply <= target);   // drop the truncated line's records
+      boardIdx = null;
       Review.active = false; Review.humanTurn = false;
-      reviewAnaGen++;                          // invalidate reviewed-position analysis
       savedPanel = null;                       // the old live line is gone — don't restore it
       document.body.classList.remove('reviewing');
       reviewBar.hidden = true;
@@ -1226,23 +1292,23 @@
 
     function goBack(){
       if (backBtn && backBtn.disabled) return;
-      const histLen = chess.history().length;
+      const live = chess.history().length;
       if (!isReviewing()){
-        if (histLen === 0) return;             // at the very start: nothing earlier
+        if (live === 0) return;                // no plies yet: nothing to review
         savedPanel = coachEl.innerHTML;        // snapshot the live reveal so we can restore it on exit
         savedBM = window.bestMoves; savedFen = window.bestMovesFen;
-        reviewIdx = histLen - 1;               // from live, step one move earlier
+        boardIdx = live - 1;                   // from live, step back one ply
       } else {
-        if (reviewIdx <= 0) return;
-        reviewIdx -= 1;
+        if (boardIdx <= 0) return;
+        boardIdx -= 1;
       }
       renderReview();
     }
 
     function goForward(){
       if (!isReviewing()) return;             // already live -> no-op
-      reviewIdx += 1;
-      if (reviewIdx >= chess.history().length){ exitReview(); return; }  // stepped onto live (no truncation)
+      boardIdx += 1;
+      if (boardIdx >= chess.history().length){ exitReview(); return; }   // stepped onto live (no truncation)
       renderReview();
     }
 
@@ -1256,9 +1322,8 @@
     syncBoard = function(){
       _prevSyncBoard.apply(this, arguments);   // sets the live board + movable + coach
       if (isReviewing()){                       // a real move arrived while reviewing -> snap to live
-        reviewIdx = null;
+        boardIdx = null;
         Review.active = false; Review.humanTurn = false;
-        reviewAnaGen++;
         document.body.classList.remove('reviewing');
         reviewBar.hidden = true;
         cg.set({ viewOnly: false });
@@ -1270,23 +1335,24 @@
 
     // New Game resets via the hidden #newBtn (which doesn't call syncBoard): clear any review state too.
     document.getElementById('newBtn').addEventListener('click', ()=>{
-      reviewIdx = null;
+      boardIdx = null;
       Review.active = false; Review.humanTurn = false;
-      savedPanel = null; reviewAnaGen++;
+      savedPanel = null;
       document.body.classList.remove('reviewing');
       reviewBar.hidden = true;
       cg.set({ viewOnly: false });
       updateNavButtons();
     });
 
-    updateNavButtons();   // initial: Back disabled (no moves yet), Forward disabled (live)
+    updateNavButtons();   // initial: Back disabled (no human moves yet), Forward disabled (live)
   })();
 
-  /* ===================== HINT LAYER (two-press reveal of the best move) =====================
-     Press 1 rings the FROM square of the analyst's best move (window.bestMoves[0]); press 2 plays that
-     move through the normal move path (onUserMove), so the engine then replies and the panel reveals the
-     top 2. The press counter resets every renderCoach (new turn / new game / right after a move). Only
-     acts at the live position on the human's turn — it stands down during Back/Forward review. */
+  /* ===================== HINT LAYER (two-press VISUAL hint — never plays the move) =====================
+     Press 1 highlights the FROM square of the analyst's best move (window.bestMoves[0]) in green.
+     Press 2 highlights the FULL move — FROM + TO squares plus a green arrow between them. The hint is
+     visual-only: the user still makes the move themselves by dragging. The press counter resets every
+     renderCoach (new turn / new game / right after a move); highlights clear on the next move or when
+     navigating review. */
   (function(){
     let hintStep = 0;
     const hintBtn = document.getElementById('hintBtn');
@@ -1295,9 +1361,11 @@
     function showHintMsg(text){ if (hintMsg){ hintMsg.textContent = text; hintMsg.hidden = false; } }
     function hideHintMsg(){ if (hintMsg){ hintMsg.textContent = ''; hintMsg.hidden = true; } }
     function clearHintShapes(){ try { cg.setAutoShapes([]); } catch(e){} }
+    // a FULL-square green fill via chessground customSvg (rendered in a 0 0 100 100 viewBox over the square)
+    function fillSquare(sq){ return { orig: sq, customSvg: { html: '<rect x="0" y="0" width="100" height="100" fill="#7bbd5b" opacity="0.5"/>' } }; }
 
     if (hintBtn) hintBtn.addEventListener('click', ()=>{
-      // works live AND on a reviewed past position that's the human's to move (press 2 there = takeback)
+      // works on the human's turn (live, or a reviewed human position); it only highlights, never moves
       if (!canMoveNow()) return;
       const bm = window.bestMoves;
       if (!bm || !bm.length){ showHintMsg('Analyzing…'); return; }   // analyst not ready: wait, don't advance
@@ -1306,11 +1374,15 @@
 
       hintStep++;
       if (hintStep === 1){
-        try { cg.setAutoShapes([{ orig: from, brush:'green' }]); } catch(e){}   // press 1: ring the from-square
-        showHintMsg('There’s your move — press Hint again to play it.');
-      } else {                                                                   // press 2: play the best move
-        clearHintShapes(); hideHintMsg();
-        onUserMove(from, to);  // real move path: takeback if reviewing, then engine replies + panel reveals
+        try { cg.setAutoShapes([ fillSquare(from) ]); } catch(e){}             // press 1: fill the from-square green
+        showHintMsg('Here’s the piece to move.');
+      } else {                                                                   // press 2: fill from+to + arrow
+        try { cg.setAutoShapes([
+          fillSquare(from),
+          fillSquare(to),
+          { orig: from, dest: to, brush:'green' }
+        ]); } catch(e){}
+        showHintMsg('Here’s the full move — play it yourself.');
       }
     });
 
@@ -1323,6 +1395,58 @@
       _origRenderCoach.apply(this, arguments);
       resetHint();
     };
+  })();
+
+  /* ===================== GAME-OVER OVERLAY (presentation only — reads the end state) =====================
+     When the live game ends (checkmate / stalemate / draw, detected in chess.js), pop a centered result
+     panel ONCE. It only reads chess.isGameOver()/isCheckmate()/isStalemate() + window.humanColor; it does
+     not touch engine/analyst/review/move logic. updateStatus is wrapped additively so the overlay appears
+     right after the ending move; an overlayDone flag keeps it from re-popping every render (incl. while
+     reviewing the finished game). Close just dismisses (review still works); New Game opens the dialog. */
+  (function(){
+    const backdrop = document.getElementById('goBackdrop');
+    const titleEl  = document.getElementById('goTitle');
+    const subEl    = document.getElementById('goSub');
+    const newBtn   = document.getElementById('goNewBtn');
+    const closeBtn = document.getElementById('goCloseBtn');
+    let overlayDone = false;        // already shown (or dismissed) for the current finished game
+
+    function show(){
+      let headline, sub, win = false;
+      if (chess.isCheckmate()){
+        const loser = chess.turn();                 // the side to move at checkmate is the one mated
+        win = (loser !== humanChar());              // human won iff the human's side is NOT the loser
+        headline = win ? '🏆 You win!' : '♚ Computer wins';
+        sub = 'by checkmate';
+      } else if (chess.isStalemate()){
+        headline = '½ Draw'; sub = 'by stalemate';
+      } else {
+        headline = '½ Draw'; sub = 'draw';
+      }
+      titleEl.textContent = headline;
+      titleEl.classList.toggle('win', win);
+      subEl.textContent = sub;
+      backdrop.hidden = false;
+    }
+    function hide(){ backdrop.hidden = true; }
+
+    // additive wrap: original updateStatus runs first, then pop the overlay once at game over
+    const _prevUpdateStatus = updateStatus;
+    updateStatus = function(){
+      _prevUpdateStatus.apply(this, arguments);
+      if (chess.isGameOver()){
+        if (!overlayDone){ overlayDone = true; show(); }
+      } else {
+        overlayDone = false; hide();                // fresh / ongoing game -> ready to show again later
+      }
+    };
+
+    closeBtn.addEventListener('click', hide);       // dismiss only — does NOT clear overlayDone (no re-pop)
+    backdrop.addEventListener('click', (e)=>{ if (e.target === backdrop) hide(); });
+    newBtn.addEventListener('click', ()=>{ hide(); document.getElementById('newGameBtn').click(); });
+
+    // New Game via the hidden #newBtn (dialog Play path) also re-arms the overlay for the next game
+    document.getElementById('newBtn').addEventListener('click', ()=>{ overlayDone = false; hide(); });
   })();
 
 </script>

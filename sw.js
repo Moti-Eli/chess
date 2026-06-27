@@ -1,6 +1,6 @@
 /* Chess Coach service worker — precache everything, serve cache-first for full offline use.
    Bump CACHE when any asset changes to force an update. */
-const CACHE = 'chess-coach-v16';
+const CACHE = 'chess-coach-v25';
 
 const ASSETS = [
   'index.html',
