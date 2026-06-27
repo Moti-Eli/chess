@@ -97,29 +97,43 @@
 
   .err{color:var(--red);}
 
-  /* coach panel wrapper (holds the find-best-move / reveal panel) */
-  .coachwrap{width:100%;max-width:440px;margin-top:12px;min-height:0;}
+  /* coach panel wrapper (holds the find-best-move / reveal panel + the alert overlay) */
+  /* flex:0 0 auto so it never shrinks/collapses against the review bar below — the two always
+     stack in normal flow (reveal panel first, review bar after), never overlapping.
+     position:relative so the significant-move alert can overlay the panel inside it. */
+  .coachwrap{width:100%;max-width:440px;margin-top:8px;flex:0 0 auto;position:relative;}
+  .coachpanel{width:100%;}
   /* slim "Find the best move" panel (and its top-2 reveal after a move) */
   .findbar{display:flex;align-items:center;gap:10px;background:var(--panel,#21302d);
-    border:1px solid var(--line);border-radius:11px;padding:11px 14px;
+    border:1px solid var(--line);border-radius:11px;padding:8px 13px;
     font-size:14px;font-weight:600;color:var(--ink);}
   .findbar .fb-text{flex:1;}
-  .findbar .fb-badge{width:22px;height:22px;border-radius:7px;flex:0 0 auto;display:grid;
-    place-items:center;font-size:15px;font-weight:800;line-height:1;
-    background:linear-gradient(150deg,var(--gold),#c8923f);color:#1a1408;}
-  .findbar.critical{background:linear-gradient(150deg,rgba(224,177,90,.18),rgba(224,177,90,.05));
-    border-color:rgba(224,177,90,.6);color:var(--gold);}
   /* revealed top-2 moves (after the human plays): slim two-row list */
-  .findbar.revealed{flex-direction:column;align-items:stretch;gap:3px;padding:9px 14px;position:relative;}
-  .findbar .fb-badge-rev{position:absolute;top:7px;right:10px;width:18px;height:18px;border-radius:5px;
-    display:grid;place-items:center;font-size:12px;font-weight:800;line-height:1;
-    background:linear-gradient(150deg,var(--gold),#c8923f);color:#1a1408;}
+  .findbar.revealed{flex-direction:column;align-items:stretch;gap:2px;padding:6px 13px;position:relative;}
   .findbar .fb-list{display:flex;flex-direction:column;gap:3px;width:100%;}
   .findbar .fb-row{display:flex;align-items:center;gap:9px;font-size:13px;font-weight:600;}
   .findbar .fb-rank{color:var(--ink-dim);width:13px;flex:0 0 auto;}
   .findbar .fb-mv{font-family:"JetBrains Mono",monospace;font-weight:700;color:var(--ink);}
   .findbar .fb-sc{margin-left:auto;font-family:"JetBrains Mono",monospace;font-weight:700;color:var(--ink-dim);}
   .findbar .fb-row.top .fb-sc{color:var(--green);}
+  /* Best-vs-You comparison rows: a left tag ("Best:" / "You:"), the move, then the eval on the right.
+     The move + eval take the row's colour (green = best/equal, amber = close, red = real mistake). */
+  .findbar .fb-tag{flex:0 0 auto;min-width:34px;font-weight:700;color:var(--ink-dim);}
+  .findbar .fb-row.cmp .fb-mv,.findbar .fb-row.cmp .fb-sc{color:var(--ink);}
+  .findbar .fb-row.cmp.green .fb-mv,.findbar .fb-row.cmp.green .fb-sc{color:var(--green);}
+  .findbar .fb-row.cmp.amber .fb-mv,.findbar .fb-row.cmp.amber .fb-sc{color:var(--gold);}
+  .findbar .fb-row.cmp.red .fb-mv,.findbar .fb-row.cmp.red .fb-sc{color:var(--red);}
+  .findbar .fb-row.cmp.dim .fb-mv,.findbar .fb-row.cmp.dim .fb-sc{color:var(--ink-dim);}
+  /* engine attribution caption — subtle single line at the bottom of the reveal panel (no bulk) */
+  .findbar .fb-attr{margin-top:2px;font-size:9px;line-height:1.2;letter-spacing:.2px;
+    color:var(--ink-dim);opacity:.65;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  /* significant-move alert — a slim gold single-row bar that OVERLAYS the reveal panel
+     (absolute inset:0 over .coachwrap) while up; the panel underneath is left untouched. */
+  .alertbar{position:absolute;inset:0;z-index:5;display:flex;align-items:center;justify-content:center;
+    gap:7px;text-align:center;border-radius:11px;padding:8px 13px;font-size:13px;font-weight:700;
+    line-height:1.25;color:#1a1408;background:linear-gradient(150deg,var(--gold),#c8923f);
+    border:1px solid rgba(224,177,90,.7);box-shadow:0 4px 14px rgba(0,0,0,.3);}
+  .alertbar[hidden]{display:none;}
   /* hint message line (shown during the two-press Hint flow) */
   .hintmsg{width:100%;max-width:440px;margin-top:8px;font-size:13px;font-weight:600;color:var(--gold);text-align:center;}
   .hintmsg[hidden]{display:none;}
@@ -165,6 +179,8 @@
   .modal h2{font-family:"Fraunces",serif;font-weight:600;font-size:20px;}
   .field{display:flex;flex-direction:column;gap:7px;}
   .field .flabel{font-size:11px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-dim);}
+  /* dim helper line above a control (e.g. the Move alerts explainer) */
+  .field .fhelp{font-size:11px;line-height:1.4;color:var(--ink-dim);}
   .seg{display:flex;gap:4px;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:3px;}
   .seg button{flex:1;background:none;border:none;color:var(--ink-dim);font-family:inherit;font-size:12px;font-weight:600;
     padding:9px 2px;border-radius:7px;cursor:pointer;transition:all .15s;}
@@ -177,11 +193,12 @@
   /* review (Back / Forward history browser) */
   .toolbar .tbtn:disabled{opacity:.3;cursor:default;}
   .toolbar .tbtn:disabled:hover{color:var(--ink-dim);background:none;}
-  /* slim review indicator — same slim footprint as the find-best-move panel */
-  .reviewbar{width:100%;max-width:440px;margin-top:8px;
+  /* slim review indicator — same slim footprint as the find-best-move panel. flex:0 0 auto so it
+     sits in normal flow directly below the reveal panel (never shrinking under it / overlapping). */
+  .reviewbar{width:100%;max-width:440px;margin-top:6px;flex:0 0 auto;
     display:flex;align-items:center;gap:10px;
     background:var(--bg2);border:1px solid var(--line);border-radius:11px;
-    font-size:13px;font-weight:600;color:var(--ink-dim);padding:8px 12px;}
+    font-size:13px;font-weight:600;color:var(--ink-dim);padding:6px 12px;}
   .reviewbar[hidden]{display:none;}
   .reviewbar #reviewMsg{flex:1;color:var(--ink);}
   .reviewbar .btn{flex:0 0 auto;max-width:none;padding:6px 11px;font-size:12px;border-radius:8px;}
@@ -216,7 +233,11 @@
     <div class="clock" id="clockYou">5:00</div>
   </div>
 
-  <div class="coachwrap" id="coach"></div>
+  <!-- coach panel (find-best-move / reveal) with the significant-move alert overlaid on top of it -->
+  <div class="coachwrap" id="coachWrap">
+    <div class="coachpanel" id="coach"></div>
+    <div class="alertbar" id="alertBar" hidden><span class="al-text"></span></div>
+  </div>
 
   <!-- hint message (shown during the two-press Hint flow) -->
   <div class="hintmsg" id="hintMsg" hidden></div>
@@ -271,6 +292,16 @@
           <button data-elo="1200" class="sel">1200</button>
           <button data-elo="1600">1600</button>
           <button data-elo="2000">2000</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <div class="fhelp">Move alerts &mdash; how strong a move must be before the app flags it.
+          Frequent catches small edges; Rare only flags game-changing moves.</div>
+        <div class="seg" id="segAlerts">
+          <button type="button" data-v="frequent">Frequent</button>
+          <button type="button" data-v="balanced" class="sel">Balanced</button>
+          <button type="button" data-v="rare">Rare</button>
         </div>
       </div>
 
@@ -391,7 +422,6 @@
 
   /* ---- analyst: a SECOND Stockfish, always full strength, MultiPV 2 ----
      Tunables (later: move to an Advanced Settings panel) */
-  const CRIT_THRESHOLD = 150;   // centipawns: gap between best & 2nd-best to call it "critical"
   const ANALYST_DEPTH  = 12;
   const MATE_VAL       = 100000;
 
@@ -469,11 +499,14 @@
   let activeChallenge = null;   // {move:uci} on a critical turn (used by the Hint button)
   window.bestMoves = [];        // [{uci, scoreCp}] White-POV, analyst's top 2 for the LIVE human position
   window.bestMovesFen = null;   // the FEN those live bestMoves were computed for (for SAN + the hint)
+  window.alertThreshold = 250;  // cp gap (best vs 2nd-best) needed to flag a "significant move"; set per New Game (Balanced default)
   // The reveal of a move's best-two PERSISTS through the opponent's reply and the human's next thinking
   // time — it is only replaced when the human moves again. revealActive is false only at game start (before
   // the first human move), when the panel shows the "Find the best move" prompt instead.
   let revealActive = false;     // has the human made at least one move this game (panel in reveal mode)?
   let revealWaitingFen = null;  // (M3) FEN whose analysis a delayed reveal is waiting on — keyed to the position, not the turn
+  let revealGen = 0;            // bumped each human move so a late (post-move) eval renders only for the current move
+  let pendingReveal = null;     // {preFen, userUci, userSan, postFen, gen} — context for the Best-vs-You comparison panel
 
   // ---- review / takeback bridge (managed by the REVIEW LAYER below; read by the core + Hint layer) ----
   // Back/Forward can now park on a PAST position from which the human may play a different move (a takeback).
@@ -497,15 +530,16 @@
     activeChallenge = null;
     window.bestMoves = [];                        // refresh the LIVE analysis for the new position...
     window.bestMovesFen = null;                   // ...but DON'T rebuild the panel: the previous move's
-    if (!revealActive) buildPromptPanel(false);   // reveal must stay up. Only the pre-first-move prompt shows.
+    if (!revealActive) buildPromptPanel();        // reveal must stay up. Only the pre-first-move prompt shows.
+    updateAlert();                                // clear any stale alert; it returns once this turn's analysis lands
     runAnalysis(chess.fen(), myTurn);             // compute this position's best-two for when the human moves
   }
 
-  // slim "Find the best move" panel; `critical` adds the gold accent + "!" badge
-  function buildPromptPanel(critical){
+  // slim "Find the best move" panel — the panel no longer changes its own appearance (the old
+  // "critical position" gold/"!" highlight was removed; significance is shown by the alert overlay instead)
+  function buildPromptPanel(){
     coachEl.innerHTML =
-      '<div class="findbar' + (critical ? ' critical' : '') + '">' +
-        (critical ? '<span class="fb-badge">!</span>' : '') +
+      '<div class="findbar">' +
         '<span class="fb-text">Find the best move</span>' +
       '</div>';
   }
@@ -530,32 +564,134 @@
       return m ? m.san : uci;
     } catch(e){ return uci; }
   }
-  // passive (non-clickable) reveal of a position's top-2 moves. `critical` (a clear best move — gap
-  // >= CRIT_THRESHOLD, or a forced single move) gets the gold "!" emphasis. bm/fen identify the position.
+  // engine attribution caption shown at the bottom of the reveal panel (depth tracks ANALYST_DEPTH)
+  function attrRow(){
+    return '<div class="fb-attr">Stockfish 18 lite · depth ' + ANALYST_DEPTH + ' · ~2600</div>';
+  }
+  // passive (non-clickable) reveal of a position's top-2 moves. bm/fen identify the position.
+  // (The panel no longer styles itself for "critical" positions — that's the alert overlay's job.)
   function renderReveal(bm, fen){
     bm = (bm || window.bestMoves || []).slice(0, 2);
     fen = fen || window.bestMovesFen;
     if (!bm.length) return;                                // nothing to show: leave the panel untouched
-    const critical = bm.length < 2 || Math.abs(bm[0].scoreCp - bm[1].scoreCp) >= CRIT_THRESHOLD;
     const rows = bm.map((m, i) =>
       '<div class="fb-row' + (i === 0 ? ' top' : '') + '">' +
         '<span class="fb-rank">' + (i+1) + '.</span>' +
         '<span class="fb-mv">' + uciToSan(m.uci, fen) + '</span>' +
         '<span class="fb-sc">' + fmtScore(m.scoreCp) + '</span>' +
       '</div>').join('');
-    coachEl.innerHTML = '<div class="findbar revealed' + (critical ? ' critical' : '') +
-      '">' + (critical ? '<span class="fb-badge fb-badge-rev">!</span>' : '') +
-      '<div class="fb-list">' + rows + '</div></div>';
+    coachEl.innerHTML = '<div class="findbar revealed">' +
+      '<div class="fb-list">' + rows + '</div>' + attrRow() + '</div>';
   }
-  // called right after the human's move lands. bm/fen are the snapshot of the position they moved FROM.
-  // The reveal then PERSISTS until the human's next move. If the analyst hadn't finished for that position,
-  // show "Analyzing…" and reveal as soon as THIS position's analysis arrives (runAnalysis' revealWaitingFen path).
-  function revealPanel(bm, fen){
-    revealActive = true;                                  // from now on the panel stays in reveal mode
-    if (bm && bm.length){
-      revealWaitingFen = null; renderReveal(bm, fen);
+
+  // ---- significant-move alert overlay (PART 3) ----
+  // On the human's LIVE turn, if the best move beats the 2nd-best by >= window.alertThreshold cp,
+  // overlay a slim gold bar on the reveal panel announcing the GAP (in pawns) — WITHOUT naming the
+  // move. No alert while reviewing, at game over, on the opponent's turn, when there's no 2nd move
+  // (single legal), or when a mate score is involved (a pawn gap would be meaningless there).
+  function updateAlert(){
+    const el = document.getElementById('alertBar');
+    if (!el) return;
+    const hide = ()=>{ el.hidden = true; };
+    if (Review.active) return hide();                      // never while reviewing a past position
+    if (chess.isGameOver()) return hide();
+    if (chess.turn() !== humanChar()) return hide();       // only on the human's own live turn
+    const bm = window.bestMoves || [];
+    if (bm.length < 2) return hide();                      // no 2nd move (single legal / mate) -> nothing to compare
+    if (window.bestMovesFen !== chess.fen()) return hide();// analysis must be for the CURRENT live position
+    const s0 = bm[0].scoreCp, s1 = bm[1].scoreCp;
+    if (Math.abs(s0) > MATE_VAL - 1000 || Math.abs(s1) > MATE_VAL - 1000) return hide();  // mate-scored: skip
+    const gap = Math.abs(s0 - s1);                         // side-to-move eval gap (colour-agnostic magnitude)
+    if (gap < (window.alertThreshold || 250)) return hide();
+    const pawns = (gap / 100).toFixed(1);                  // e.g. 230cp -> "2.3"
+    el.querySelector('.al-text').textContent =
+      '⚡ Significant move available — it’s ' + pawns + ' better than the next best. Find it!';
+    el.hidden = false;
+  }
+  // ---- Best-vs-You comparison panel (shown after the human moves, persists until they move again) ----
+  // Two slim lines: the single BEST move (from the pre-move analysis) and the move the USER actually
+  // played, each with its White-POV eval; the "You" line is colour-coded by how much it lost vs best.
+  // Loss thresholds (in pawns) — easy to find / change:
+  const LOSS_GREEN_MAX = 0.1;   // <= this: played the best move or essentially equal -> GREEN
+  const LOSS_AMBER_MAX = 0.5;   // <= this: close, fine -> AMBER; above this -> RED (a real mistake)
+
+  // pick the colour class for the "You" line from the loss (pawns, >= 0)
+  function lossClass(lossPawns){
+    if (lossPawns <= LOSS_GREEN_MAX) return 'green';
+    if (lossPawns <= LOSS_AMBER_MAX) return 'amber';
+    return 'red';
+  }
+  // one comparison row: a tag ("Best:" / "You:" / "Best move!"), the move SAN, and the eval on the right
+  function cmpRow(cls, tag, san, scoreCp){
+    return '<div class="fb-row cmp ' + cls + '">' +
+      '<span class="fb-tag">' + tag + '</span>' +
+      '<span class="fb-mv">' + san + '</span>' +
+      '<span class="fb-sc">' + (scoreCp == null ? '…' : fmtScore(scoreCp)) + '</span>' +
+    '</div>';
+  }
+  // Render the panel. bestScoreCp/userScoreCp are White-POV; userScoreCp may be null while it's still
+  // being computed (shown as "…"). moverWhite tells us which side just moved, so loss is from THAT side.
+  function renderComparison(bestUci, bestSan, bestScoreCp, userUci, userSan, userScoreCp, moverWhite){
+    let rows;
+    if (userUci === bestUci){
+      // the user played the best move -> collapse to a single green "Best move!" line
+      rows = cmpRow('green', 'Best move!', bestSan, bestScoreCp);
     } else {
-      revealWaitingFen = fen;                             // (M3) reveal once this exact position's analysis lands
+      let youCls = 'dim';
+      if (userScoreCp != null){
+        // loss from the moving side's POV (so it's >= 0): White wants higher, Black wants lower
+        const lossCp = moverWhite ? (bestScoreCp - userScoreCp) : (userScoreCp - bestScoreCp);
+        youCls = lossClass(Math.max(0, lossCp) / 100);
+      }
+      rows = cmpRow('green', 'Best:', bestSan, bestScoreCp) +
+             cmpRow(youCls, 'You:', userSan, userScoreCp);
+    }
+    coachEl.innerHTML = '<div class="findbar revealed"><div class="fb-list">' + rows + '</div>' + attrRow() + '</div>';
+  }
+
+  // Build the comparison from the pre-move analysis (bm = top-2 of the position moved FROM). The best
+  // move + eval come straight from bm[0]. The user's-move eval is taken from bm when the move is one of
+  // the top-2 (already computed); otherwise we read it from a one-shot analyst eval of the resulting
+  // position (the analyst is idle during the opponent's turn). gen guards against a newer move.
+  async function buildComparison(bm, preFen, userUci, userSan, postFen, gen){
+    bm = (bm || []).slice(0, 2);
+    const best = bm[0];
+    if (!best){ return; }                                  // no analysis at all: leave the panel as-is
+    const bestSan = uciToSan(best.uci, preFen);
+    const moverWhite = (preFen.split(' ')[1] === 'w');     // did White just move?
+
+    // user's-move eval (White-POV): reuse the top-2 analysis when the played move is in it
+    let userScoreCp = null;
+    if (userUci === best.uci) userScoreCp = best.scoreCp;
+    else { const hit = bm.find(m => m.uci === userUci); if (hit) userScoreCp = hit.scoreCp; }
+
+    renderComparison(best.uci, bestSan, best.scoreCp, userUci, userSan, userScoreCp, moverWhite);
+
+    // not a top-2 move -> read the eval of the resulting position (simplest robust source)
+    if (userScoreCp == null && userUci !== best.uci){
+      let res; try { res = await analyze(postFen); } catch(e){ res = null; }
+      if (gen !== revealGen) return;                       // a newer move superseded this reveal
+      if (res && res.c1 != null){
+        const tw = (postFen.split(' ')[1] === 'w') ? 1 : -1;
+        userScoreCp = res.c1 * tw;
+      }
+      renderComparison(best.uci, bestSan, best.scoreCp, userUci, userSan, userScoreCp, moverWhite);
+    }
+  }
+
+  // called right after the human's move lands. preBM/preFen are the snapshot of the position they moved
+  // FROM; userUci/userSan are the move they played; postFen is the resulting position. The comparison
+  // PERSISTS until the human's next move. If the pre-move analysis hadn't finished, show "Analyzing…" and
+  // build as soon as that position's analysis arrives (runAnalysis' revealWaitingFen path).
+  function revealPanel(preBM, preFen, userUci, userSan, postFen){
+    revealActive = true;                                  // from now on the panel stays in reveal mode
+    const gen = ++revealGen;
+    pendingReveal = { preFen, userUci, userSan, postFen, gen };
+    if (preBM && preBM.length){
+      revealWaitingFen = null;
+      buildComparison(preBM, preFen, userUci, userSan, postFen, gen);
+    } else {
+      revealWaitingFen = preFen;                          // (M3) build once this exact position's analysis lands
       coachEl.innerHTML = '<div class="findbar"><span class="fb-text">Analyzing…</span></div>';
     }
   }
@@ -580,17 +716,21 @@
     // (e.g. the opponent already replied). This is what prevents the panel getting stuck on "Analyzing…".
     if (revealWaitingFen === fen){
       revealWaitingFen = null;
-      renderReveal(bm, fen);
-      if (myTurn === coachTurn){ window.bestMoves = bm; window.bestMovesFen = fen; }  // still the live position
+      if (pendingReveal && pendingReveal.preFen === fen){   // build the Best-vs-You comparison now that P is analysed
+        buildComparison(bm, fen, pendingReveal.userUci, pendingReveal.userSan, pendingReveal.postFen, pendingReveal.gen);
+      } else {
+        renderReveal(bm, fen);                              // (fallback) no pending comparison context
+      }
+      if (myTurn === coachTurn){ window.bestMoves = bm; window.bestMovesFen = fen; updateAlert(); }  // still the live position
       return;
     }
     if (myTurn !== coachTurn) return;                  // stale live analysis with no pending reveal -> drop
     window.bestMoves = bm;
     window.bestMovesFen = fen;
     // gap is measured side-to-move POV (c1 is always the best for the mover) — colour-agnostic
-    const critical = res.c1 != null && (res.c2 == null || (res.c1 - res.c2) >= CRIT_THRESHOLD);
-    if (critical && res.bestUci && res.bestUci !== '(none)') activeChallenge = { move: res.bestUci };
-    if (!revealActive) buildPromptPanel(critical);     // pre-first-move prompt may pick up the gold "!"
+    if (res.bestUci && res.bestUci !== '(none)') activeChallenge = { move: res.bestUci };
+    if (!revealActive) buildPromptPanel();
+    updateAlert();                                     // this turn's live analysis just landed — flag it if the gap qualifies
   }
 
   // While REVIEWING a past position, analyse THAT position and show the best move(s) to play from here
@@ -693,8 +833,12 @@
       try { move = chess.move({ from, to, promotion:'q' }); }  // (C1) chess.js 1.4 throws on illegal
       catch(e){ syncBoard(); return; }
       if (!move){ syncBoard(); return; }
+      const userUci = move.from + move.to + (move.promotion || '');   // the move the human just played
+      const userSan = move.san;
+      const postFen = chess.fen();                 // position resulting from the user's move (for its eval)
       syncBoard();                                 // board updates (renderCoach early-returns: opponent's turn)
-      revealPanel(preBM, preFen);                  // reveal that position's best-two — and keep it up all turn
+      revealPanel(preBM, preFen, userUci, userSan, postFen);   // show Best vs You — and keep it up all turn
+      updateAlert();                               // the human moved -> clear the significant-move alert (now opponent's turn)
       if (chess.isGameOver()) return;
       cg.set({ movable:{ color: window.humanColor || 'white', dests:new Map() } });
       const gen = opponentGen;                     // (C2) tag this reply so a takeback / new game can cancel it
@@ -863,12 +1007,16 @@
      workers, the analysis/review logic, or chess.js move handling. */
   (function(){
     // session-only prefs (no localStorage yet — that's the packaging step)
-    window.gamePrefs  = window.gamePrefs || { color:'random', time:'unlimited' };
+    window.gamePrefs  = window.gamePrefs || { color:'random', time:'unlimited', alerts:'balanced' };
     window.humanColor = 'white';
+
+    // Move-alert sensitivity -> centipawn gap threshold (best vs 2nd-best) to flag a "significant move"
+    const ALERT_CP = { frequent:150, balanced:250, rare:400 };
 
     const backdrop = document.getElementById('ngBackdrop');
     const segColor = document.getElementById('segColor');
     const segTime  = document.getElementById('segTime');
+    const segAlerts = document.getElementById('segAlerts');
 
     function bindSeg(seg, key){
       seg.querySelectorAll('button').forEach(b=>{
@@ -879,10 +1027,10 @@
         });
       });
     }
-    bindSeg(segColor,'color'); bindSeg(segTime,'time');
+    bindSeg(segColor,'color'); bindSeg(segTime,'time'); bindSeg(segAlerts,'alerts');
 
     function selectIn(seg, val){ seg.querySelectorAll('button').forEach(x=>x.classList.toggle('sel', x.dataset.v===val)); }
-    function reflectPrefs(){ selectIn(segColor,gamePrefs.color); selectIn(segTime,gamePrefs.time); }
+    function reflectPrefs(){ selectIn(segColor,gamePrefs.color); selectIn(segTime,gamePrefs.time); selectIn(segAlerts,gamePrefs.alerts); }
 
     function openDialog(){ reflectPrefs(); backdrop.hidden = false; }
     function closeDialog(){ backdrop.hidden = true; }
@@ -942,6 +1090,7 @@
       const choice   = gamePrefs.color;
       const resolved = choice === 'random' ? (Math.random() < 0.5 ? 'white' : 'black') : choice;
       window.humanColor = resolved;
+      window.alertThreshold = ALERT_CP[gamePrefs.alerts] || 250;   // apply the chosen move-alert sensitivity
       setupClocks(gamePrefs.time);   // reset + (re)start the human clock for the new game
       closeDialog();
 
@@ -955,6 +1104,10 @@
         setTimeout(opponentMove, 350);   // engine (White) makes the first move
       }
     });
+
+    // No saved-game persistence: every load starts fresh, so auto-open the New Game dialog on load
+    // (after the board + engine/analyst have been initialized above). Play behaves exactly as a manual open.
+    openDialog();
   })();
 
   /* ===================== REVIEW LAYER (Back / Forward history browser + takeback) =====================
@@ -1032,6 +1185,7 @@
       Review.active = true; Review.humanTurn = humanTurn;
       reviewBar.hidden = false;
       reviewMsg.textContent = 'Reviewing — ' + reviewIdx + ' / ' + live;
+      updateAlert();                          // no significant-move alert while reviewing a past position
       showReviewAnalysis(fen);                // panel shows the best move(s) to play FROM this position
       updateNavButtons();
     }
@@ -1047,6 +1201,7 @@
       syncBoard();                             // restore live board + movable + (re)analysis
       restoreLivePanel();                      // bring back the live reveal that was showing pre-review
       resetHint();
+      updateAlert();                           // back to live: re-flag the current position if its gap qualifies
       updateNavButtons();
     }
 
@@ -1106,6 +1261,7 @@
         reviewBar.hidden = true;
         cg.set({ viewOnly: false });
         restoreLivePanel();                     // keep the human's last live reveal visible (it persists)
+        updateAlert();                          // left review via a real move — re-evaluate the alert for the live position
       }
       updateNavButtons();
     };
