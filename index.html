@@ -22,7 +22,6 @@
     --ink:#ecece4; --ink-dim:#9bb0aa;
     --gold:#e0b15a; --green:#7bbd5b; --red:#e08a78;
     --sq-light:#d9cdb4; --sq-dark:#465863;
-    --card-h:200px;   /* fixed footprint for the coach cards (question pair and the challenge) */
   }
   *{box-sizing:border-box;margin:0;padding:0}
   html,body{height:100%}
@@ -98,9 +97,9 @@
 
   .err{color:var(--red);}
 
-  /* coach card */
+  /* coach panel wrapper (holds the find-best-move / reveal panel) */
   .coachwrap{width:100%;max-width:440px;margin-top:12px;min-height:0;}
-  /* slim "Find the best move" panel (replaces the old question cards) */
+  /* slim "Find the best move" panel (and its top-2 reveal after a move) */
   .findbar{display:flex;align-items:center;gap:10px;background:var(--panel,#21302d);
     border:1px solid var(--line);border-radius:11px;padding:11px 14px;
     font-size:14px;font-weight:600;color:var(--ink);}
@@ -111,25 +110,22 @@
   .findbar.critical{background:linear-gradient(150deg,rgba(224,177,90,.18),rgba(224,177,90,.05));
     border-color:rgba(224,177,90,.6);color:var(--gold);}
   /* revealed top-2 moves (after the human plays): slim two-row list */
-  .findbar.revealed{flex-direction:column;align-items:stretch;gap:3px;padding:9px 14px;}
+  .findbar.revealed{flex-direction:column;align-items:stretch;gap:3px;padding:9px 14px;position:relative;}
+  .findbar .fb-badge-rev{position:absolute;top:7px;right:10px;width:18px;height:18px;border-radius:5px;
+    display:grid;place-items:center;font-size:12px;font-weight:800;line-height:1;
+    background:linear-gradient(150deg,var(--gold),#c8923f);color:#1a1408;}
   .findbar .fb-list{display:flex;flex-direction:column;gap:3px;width:100%;}
   .findbar .fb-row{display:flex;align-items:center;gap:9px;font-size:13px;font-weight:600;}
   .findbar .fb-rank{color:var(--ink-dim);width:13px;flex:0 0 auto;}
   .findbar .fb-mv{font-family:"JetBrains Mono",monospace;font-weight:700;color:var(--ink);}
   .findbar .fb-sc{margin-left:auto;font-family:"JetBrains Mono",monospace;font-weight:700;color:var(--ink-dim);}
   .findbar .fb-row.top .fb-sc{color:var(--green);}
-  /* graduated-hint message line */
+  /* hint message line (shown during the two-press Hint flow) */
   .hintmsg{width:100%;max-width:440px;margin-top:8px;font-size:13px;font-weight:600;color:var(--gold);text-align:center;}
   .hintmsg[hidden]{display:none;}
 
   /* ===================== VISUAL LAYER (presentation only) ===================== */
-  /* header right: thinking-rating badge + fullscreen */
-  .hd-right{display:flex;align-items:center;gap:8px;}
-  .rating-badge{display:flex;align-items:center;gap:7px;background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:5px 9px;}
-  .rating-badge .rb-icon{width:22px;height:22px;border-radius:6px;background:linear-gradient(150deg,var(--gold),#b9863a);display:grid;place-items:center;color:#1a1408;font-size:13px;}
-  .rating-badge .rb-text{display:flex;flex-direction:column;line-height:1.05;}
-  .rating-badge .rb-label{font-size:8px;letter-spacing:1.4px;text-transform:uppercase;color:var(--ink-dim);}
-  .rating-badge .rb-num{font-family:"JetBrains Mono",monospace;font-size:14px;font-weight:700;color:var(--gold);}
+  /* header right: fullscreen button */
   .iconbtn{width:36px;height:36px;background:var(--bg2);border:1px solid var(--line);color:var(--ink);border-radius:10px;font-size:16px;cursor:pointer;display:grid;place-items:center;transition:all .16s;}
   .iconbtn:hover{border-color:rgba(255,255,255,.22);}
   .iconbtn:focus-visible{outline:2px solid var(--gold);outline-offset:1px;}
@@ -181,27 +177,21 @@
   /* review (Back / Forward history browser) */
   .toolbar .tbtn:disabled{opacity:.3;cursor:default;}
   .toolbar .tbtn:disabled:hover{color:var(--ink-dim);background:none;}
-  .reviewbar{width:100%;max-width:440px;margin-top:12px;min-height:var(--card-h);
-    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;
-    background:var(--bg2);border:1px dashed var(--line);border-radius:13px;color:var(--ink-dim);
-    font-size:14px;text-align:center;padding:14px;}
+  /* slim review indicator — same slim footprint as the find-best-move panel */
+  .reviewbar{width:100%;max-width:440px;margin-top:8px;
+    display:flex;align-items:center;gap:10px;
+    background:var(--bg2);border:1px solid var(--line);border-radius:11px;
+    font-size:13px;font-weight:600;color:var(--ink-dim);padding:8px 12px;}
   .reviewbar[hidden]{display:none;}
-  .reviewbar #reviewMsg{font-weight:600;color:var(--ink);}
-  .reviewbar .btn{max-width:220px;}
-  body.reviewing #coach{display:none;}
+  .reviewbar #reviewMsg{flex:1;color:var(--ink);}
+  .reviewbar .btn{flex:0 0 auto;max-width:none;padding:6px 11px;font-size:12px;border-radius:8px;}
 </style>
 </head>
 <body>
 
   <header>
     <div class="brand"><div class="dot">&#9822;</div><h1>Coach</h1></div>
-    <div class="hd-right">
-      <div class="rating-badge" title="Thinking Rating">
-        <span class="rb-icon">&#9822;</span>
-        <span class="rb-text"><span class="rb-label">Thinking</span><span class="rb-num" id="thinkingRating">1550</span></span>
-      </div>
-      <button class="iconbtn" id="fsBtn" type="button" aria-label="Toggle fullscreen" title="Fullscreen">&#9974;</button>
-    </div>
+    <button class="iconbtn" id="fsBtn" type="button" aria-label="Toggle fullscreen" title="Fullscreen">&#9974;</button>
   </header>
 
   <div class="status" id="status"><span class="turnchip w"></span> Loading…</div>
@@ -228,18 +218,16 @@
 
   <div class="coachwrap" id="coach"></div>
 
-  <!-- graduated-hint message (shown only when the Hint button is pressed) -->
+  <!-- hint message (shown during the two-press Hint flow) -->
   <div class="hintmsg" id="hintMsg" hidden></div>
 
-  <!-- review-only indicator, shown in place of the coach cards while browsing past moves -->
+  <!-- slim "Reviewing — X / Y" indicator, shown while browsing/playing from past positions -->
   <div class="reviewbar" id="reviewBar" hidden>
     <span id="reviewMsg">Reviewing</span>
     <button class="btn ghost" id="reviewLiveBtn" type="button">Return to live &#9197;</button>
   </div>
 
-  <!-- kept so the existing undo handler still binds without throwing; surfaced later -->
-  <button id="undoBtn" type="button" hidden aria-hidden="true"></button>
-  <!-- the existing new-game reset handler stays bound to this hidden button; the toolbar opens the dialog and Play triggers this -->
+  <!-- the new-game reset logic is bound to this hidden button; the toolbar opens the dialog and Play triggers it -->
   <button id="newBtn" type="button" hidden aria-hidden="true"></button>
 
   <nav class="toolbar" id="toolbar" aria-label="Game controls">
@@ -355,10 +343,9 @@
         const rs = readyResolvers; readyResolvers = [];
         rs.forEach(r=>r());
       } else if (line.startsWith('bestmove')){
-        // (C1) match this bestmove to the 'go' that produced it via FIFO generation ids;
-        // ignore anything that isn't the response to the most recently issued 'go'.
-        const gen = engineQueue.shift();
-        if (gen === engineGen && pendingResolve){
+        // (C1/M1) match this bestmove to its 'go' via the FIFO id queue; only the latest request resolves.
+        const id = engineQueue.shift();
+        if (id === engineResolveId && pendingResolve){
           const uci = line.split(' ')[1];
           const r = pendingResolve; pendingResolve = null; r(uci);
         }
@@ -371,18 +358,26 @@
   }
 
   let pendingResolve = null;
-  let engineGen = 0;          // (C1) generation of the latest issued 'go'
-  let engineQueue = [];       // (C1) gens of in-flight 'go's, in order, awaiting their bestmove
+  let engineReqId = 0;        // (C1/M1) id of the latest issued 'go'
+  let engineResolveId = 0;    // (M1) only the request bearing this id may resolve pendingResolve
+  let engineQueue = [];       // (C1) ids of in-flight 'go's, FIFO, each awaiting its bestmove
   function bestMove(fen){
     return new Promise((resolve)=>{
+      // (M1/M4) settle any still-pending request cleanly (no leaked promise), then supersede it
+      if (pendingResolve){ const f = pendingResolve; pendingResolve = null; f(null); }
+      const id = ++engineReqId; engineResolveId = id; engineQueue.push(id);
       pendingResolve = resolve;
-      const gen = ++engineGen; engineQueue.push(gen);
+      engine.postMessage('stop');                          // (M4) don't let searches stack
       engine.postMessage('position fen ' + fen);
-      engine.postMessage('go movetime ' + thinkTime());   // (1) level-based time
+      engine.postMessage('go movetime ' + thinkTime());    // (1) level-based time
     });
   }
-  // (C1) invalidate any in-flight engine search (e.g. on New Game) so its stale bestmove is ignored
-  function invalidateEngine(){ engineGen++; pendingResolve = null; }
+  // (C1/M1) invalidate any in-flight engine search (New Game / supersede) so its stale bestmove is ignored
+  function invalidateEngine(){
+    if (pendingResolve){ const f = pendingResolve; pendingResolve = null; f(null); }
+    engineResolveId = ++engineReqId;                       // no in-flight bestmove will match this id
+    try { engine.postMessage('stop'); } catch(e){}
+  }
   startEngine();
   /* ====================================================================================== */
 
@@ -402,8 +397,10 @@
 
   let analyst = null, analystReady = false, analystDead = false;
   let analystScores = {}, analystResolve = null;
-  let analystGen = 0;          // (M1) generation of the latest issued analyst 'go'
-  let analystQueue = [];       // (M1) gens of in-flight analyst 'go's, awaiting their bestmove
+  let analystReqId = 0;        // (M1) id of the latest issued analyst 'go'
+  let analystResolveId = 0;    // (M1) only the request bearing this id may resolve
+  let analystBufId = 0;        // (M2) request id that analystScores currently holds (per-request buffer isolation)
+  let analystQueue = [];       // ids of in-flight analyst 'go's, FIFO, each awaiting its bestmove
 
   function startAnalyst(){
     try { analyst = new Worker(SF_ENGINE); } catch(e){ analystDead = true; return; }
@@ -415,6 +412,11 @@
       } else if (line === 'readyok'){
         analystReady = true;
       } else if (line.startsWith('info') && line.includes('multipv') && line.includes(' pv ')){
+        // (M2) bucket info lines by the search currently producing output (front of the FIFO queue), so a
+        // superseded search's late lines can never contaminate a different request's score buffer.
+        const recv = analystQueue[0];
+        if (recv == null) return;                          // no in-flight search -> ignore stray info
+        if (analystBufId !== recv){ analystScores = {}; analystBufId = recv; }   // new search -> fresh buffer
         const mpv = +(line.match(/multipv (\d+)/)||[])[1];
         const mM = line.match(/score mate (-?\d+)/), mC = line.match(/score cp (-?\d+)/);
         let cp;
@@ -424,17 +426,16 @@
         const first = (line.split(' pv ')[1]||'').trim().split(' ')[0];
         analystScores[mpv] = { cp, move:first };
       } else if (line.startsWith('bestmove')){
-        // (M1) only honour the bestmove for the most recently issued analyst 'go'; a stale one
-        // resets the score buffer so the next (current) search accumulates cleanly.
-        const gen = analystQueue.shift();
-        if (gen === analystGen && analystResolve){
-          const s = analystScores; analystScores = {};
+        // (M1/M2) this bestmove completes the oldest in-flight search; read ITS buffer and resolve only if
+        // it's the latest request. Reset the buffer so the next search accumulates cleanly.
+        const id = analystQueue.shift();
+        const s = (analystBufId === id) ? analystScores : {};
+        analystScores = {}; analystBufId = 0;
+        if (id === analystResolveId && analystResolve){
           const res = { bestUci: line.split(' ')[1],
                         c1: s[1] ? s[1].cp : null, m1: s[1] ? s[1].move : null,
                         c2: s[2] ? s[2].cp : null, m2: s[2] ? s[2].move : null };
           const f = analystResolve; analystResolve = null; f(res);
-        } else {
-          analystScores = {};
         }
       }
     };
@@ -446,38 +447,58 @@
 
   function analyze(fen){
     return new Promise((resolve)=>{
-      analystResolve = resolve; analystScores = {};
-      const gen = ++analystGen; analystQueue.push(gen);
+      // (M1/M4) settle any still-pending request cleanly (resolve null) before superseding it
+      if (analystResolve){ const f = analystResolve; analystResolve = null; f(null); }
+      const id = ++analystReqId; analystResolveId = id; analystQueue.push(id);
+      analystResolve = resolve;
+      analyst.postMessage('stop');                       // (M4) don't let searches stack
       analyst.postMessage('position fen ' + fen);
       analyst.postMessage('go depth ' + ANALYST_DEPTH);
     });
   }
-  // (M1) invalidate any in-flight analyst search (e.g. on New Game) so its stale result is ignored
-  function invalidateAnalyst(){ analystGen++; analystResolve = null; analystScores = {}; }
+  // (M1) invalidate any in-flight analyst search (New Game) so its stale result is ignored
+  function invalidateAnalyst(){
+    if (analystResolve){ const f = analystResolve; analystResolve = null; f(null); }
+    analystResolveId = ++analystReqId;                   // no in-flight bestmove will match this id
+    try { analyst.postMessage('stop'); } catch(e){}
+  }
   const sleep = (ms)=> new Promise(r=>setTimeout(r,ms));
 
   /* ---- coach state ---- */
   let coachTurn = 0;            // increments each time it becomes the human's turn
   let activeChallenge = null;   // {move:uci} on a critical turn (used by the Hint button)
-  window.bestMoves = [];        // [{uci, scoreCp}] White-POV, analyst's top 2 for the live human position
-  window.bestMovesFen = null;   // the FEN those bestMoves were computed for (for SAN + hint after the move lands)
-  let panelRevealed = false;    // true once this turn's panel shows the top-2 reveal (vs the prompt)
-  let revealWaiting = null;     // coachTurn awaiting reveal because the user moved before the analyst finished
+  window.bestMoves = [];        // [{uci, scoreCp}] White-POV, analyst's top 2 for the LIVE human position
+  window.bestMovesFen = null;   // the FEN those live bestMoves were computed for (for SAN + the hint)
+  // The reveal of a move's best-two PERSISTS through the opponent's reply and the human's next thinking
+  // time — it is only replaced when the human moves again. revealActive is false only at game start (before
+  // the first human move), when the panel shows the "Find the best move" prompt instead.
+  let revealActive = false;     // has the human made at least one move this game (panel in reveal mode)?
+  let revealWaitingFen = null;  // (M3) FEN whose analysis a delayed reveal is waiting on — keyed to the position, not the turn
+
+  // ---- review / takeback bridge (managed by the REVIEW LAYER below; read by the core + Hint layer) ----
+  // Back/Forward can now park on a PAST position from which the human may play a different move (a takeback).
+  const Review = { active:false, humanTurn:false, takeback:null };  // takeback(): rebuild chess to the reviewed ply
+  let reviewAnaGen = 0;         // generation guard for analysing a reviewed position (stale results ignored)
+  let resetHint = ()=>{};       // the Hint layer overrides this so navigation/takeback can clear its 2-press state
 
   function humanChar(){ return (window.humanColor === 'black') ? 'b' : 'w'; }
 
+  // May the human drag/hint a move right now — live, OR on a past position that's the human's to move?
+  function canMoveNow(){
+    if (chess.isGameOver()) return false;
+    return Review.active ? Review.humanTurn : (chess.turn() === humanChar());
+  }
+
   function renderCoach(){
-    if (chess.isGameOver()){ coachEl.innerHTML = ''; activeChallenge = null; window.bestMoves = []; return; }
-    if (chess.turn() !== humanChar()) return;   // opponent's turn: leave the panel as-is
+    if (chess.isGameOver()){ activeChallenge = null; window.bestMoves = []; return; }   // leave panel as-is
+    if (chess.turn() !== humanChar()) return;    // opponent's turn: leave the panel exactly as-is
     coachTurn++;
     const myTurn = coachTurn;
     activeChallenge = null;
-    window.bestMoves = [];
-    window.bestMovesFen = null;
-    panelRevealed = false;                      // new turn: back to the prompt
-    revealWaiting = null;
-    buildPromptPanel(false);                    // slim prompt immediately (normal styling)
-    runAnalysis(chess.fen(), myTurn);           // analyst may upgrade this turn to "critical"
+    window.bestMoves = [];                        // refresh the LIVE analysis for the new position...
+    window.bestMovesFen = null;                   // ...but DON'T rebuild the panel: the previous move's
+    if (!revealActive) buildPromptPanel(false);   // reveal must stay up. Only the pre-first-move prompt shows.
+    runAnalysis(chess.fen(), myTurn);             // compute this position's best-two for when the human moves
   }
 
   // slim "Find the best move" panel; `critical` adds the gold accent + "!" badge
@@ -502,31 +523,39 @@
     return (pawns >= 0 ? '+' : '') + pawns.toFixed(1);
   }
   // readable move text: SAN via a throwaway chess.js clone of the analysed position, else the raw uci
-  function uciToSan(uci){
+  function uciToSan(uci, fen){
     try {
-      const tmp = new Chess(window.bestMovesFen || chess.fen());
+      const tmp = new Chess(fen || window.bestMovesFen || chess.fen());
       const m = tmp.move({ from:uci.slice(0,2), to:uci.slice(2,4), promotion: uci.length>4 ? uci[4] : 'q' });
       return m ? m.san : uci;
     } catch(e){ return uci; }
   }
-  function renderReveal(){
-    const bm = (window.bestMoves || []).slice(0, 2);
-    if (!bm.length){ buildPromptPanel(false); return; }
+  // passive (non-clickable) reveal of a position's top-2 moves. `critical` (a clear best move — gap
+  // >= CRIT_THRESHOLD, or a forced single move) gets the gold "!" emphasis. bm/fen identify the position.
+  function renderReveal(bm, fen){
+    bm = (bm || window.bestMoves || []).slice(0, 2);
+    fen = fen || window.bestMovesFen;
+    if (!bm.length) return;                                // nothing to show: leave the panel untouched
+    const critical = bm.length < 2 || Math.abs(bm[0].scoreCp - bm[1].scoreCp) >= CRIT_THRESHOLD;
     const rows = bm.map((m, i) =>
       '<div class="fb-row' + (i === 0 ? ' top' : '') + '">' +
         '<span class="fb-rank">' + (i+1) + '.</span>' +
-        '<span class="fb-mv">' + uciToSan(m.uci) + '</span>' +
+        '<span class="fb-mv">' + uciToSan(m.uci, fen) + '</span>' +
         '<span class="fb-sc">' + fmtScore(m.scoreCp) + '</span>' +
       '</div>').join('');
-    coachEl.innerHTML = '<div class="findbar revealed"><div class="fb-list">' + rows + '</div></div>';
+    coachEl.innerHTML = '<div class="findbar revealed' + (critical ? ' critical' : '') +
+      '">' + (critical ? '<span class="fb-badge fb-badge-rev">!</span>' : '') +
+      '<div class="fb-list">' + rows + '</div></div>';
   }
-  // called right after the human's move lands (their move applied; opponent to move). bestMoves still
-  // hold the pre-move analysis. If the analyst hasn't finished, show "Analyzing…" and reveal on arrival.
-  function revealPanel(){
-    if (window.bestMoves && window.bestMoves.length){
-      panelRevealed = true; revealWaiting = null; renderReveal();
+  // called right after the human's move lands. bm/fen are the snapshot of the position they moved FROM.
+  // The reveal then PERSISTS until the human's next move. If the analyst hadn't finished for that position,
+  // show "Analyzing…" and reveal as soon as THIS position's analysis arrives (runAnalysis' revealWaitingFen path).
+  function revealPanel(bm, fen){
+    revealActive = true;                                  // from now on the panel stays in reveal mode
+    if (bm && bm.length){
+      revealWaitingFen = null; renderReveal(bm, fen);
     } else {
-      panelRevealed = false; revealWaiting = coachTurn;
+      revealWaitingFen = fen;                             // (M3) reveal once this exact position's analysis lands
       coachEl.innerHTML = '<div class="findbar"><span class="fb-text">Analyzing…</span></div>';
     }
   }
@@ -540,21 +569,52 @@
       const t0 = Date.now();
       while (!analystReady && !analystDead && Date.now()-t0 < 12000){ await sleep(150); }
     }
-    if (analystDead || myTurn !== coachTurn) return;
+    if (analystDead) return;
     let res; try { res = await analyze(fen); } catch(e){ return; }
-    if (myTurn !== coachTurn) return;                  // user already moved on
-    const toWhite = (chess.turn() === 'w') ? 1 : -1;   // analyst cp is from side-to-move POV
+    if (!res) return;                                  // (M1) request was superseded by a newer one
+    const toWhite = (fen.split(' ')[1] === 'w') ? 1 : -1;   // POV from the ANALYSED position's side to move
     const bm = [];
     if (res.c1 != null && res.m1) bm.push({ uci: res.m1, scoreCp: res.c1 * toWhite });
     if (res.c2 != null && res.m2) bm.push({ uci: res.m2, scoreCp: res.c2 * toWhite });
+    // (M3) a delayed reveal is waiting on THIS exact position — render it even if the turn has since advanced
+    // (e.g. the opponent already replied). This is what prevents the panel getting stuck on "Analyzing…".
+    if (revealWaitingFen === fen){
+      revealWaitingFen = null;
+      renderReveal(bm, fen);
+      if (myTurn === coachTurn){ window.bestMoves = bm; window.bestMovesFen = fen; }  // still the live position
+      return;
+    }
+    if (myTurn !== coachTurn) return;                  // stale live analysis with no pending reveal -> drop
     window.bestMoves = bm;
     window.bestMovesFen = fen;
     // gap is measured side-to-move POV (c1 is always the best for the mover) — colour-agnostic
     const critical = res.c1 != null && (res.c2 == null || (res.c1 - res.c2) >= CRIT_THRESHOLD);
     if (critical && res.bestUci && res.bestUci !== '(none)') activeChallenge = { move: res.bestUci };
-    if (panelRevealed) return;                          // reveal already showing; leave it
-    if (revealWaiting === myTurn){ revealWaiting = null; panelRevealed = true; renderReveal(); return; }
-    buildPromptPanel(critical);                         // refresh the prompt (adds the gold "!" when critical)
+    if (!revealActive) buildPromptPanel(critical);     // pre-first-move prompt may pick up the gold "!"
+  }
+
+  // While REVIEWING a past position, analyse THAT position and show the best move(s) to play from here
+  // (this is what's best NOW, not the previous move's pair). Also stashes them in window.bestMoves so the
+  // Hint button can play the best move straight from the reviewed position. reviewAnaGen guards staleness.
+  async function showReviewAnalysis(fen){
+    const myGen = ++reviewAnaGen;
+    window.bestMoves = []; window.bestMovesFen = fen;
+    coachEl.innerHTML = '<div class="findbar"><span class="fb-text">Best move here…</span></div>';
+    if (analystDead) return;
+    if (!analystReady){
+      const t0 = Date.now();
+      while (!analystReady && !analystDead && Date.now()-t0 < 12000){ await sleep(150); }
+    }
+    if (analystDead || myGen !== reviewAnaGen) return;
+    let res; try { res = await analyze(fen); } catch(e){ return; }
+    if (!res) return;                                   // (M1) request was superseded by a newer one
+    if (myGen !== reviewAnaGen) return;                 // navigated to another ply / went live meanwhile
+    const toWhite = (fen.split(' ')[1] === 'w') ? 1 : -1;   // POV from the REVIEWED position's side to move
+    const bm = [];
+    if (res.c1 != null && res.m1) bm.push({ uci: res.m1, scoreCp: res.c1 * toWhite });
+    if (res.c2 != null && res.m2) bm.push({ uci: res.m2, scoreCp: res.c2 * toWhite });
+    window.bestMoves = bm; window.bestMovesFen = fen;
+    renderReveal(bm, fen);
   }
   /* ======================================================================= */
 
@@ -610,22 +670,45 @@
     renderCoach();
   }
 
+  // ----- engine-reply scheduling token (C2): lets New Game / takeback cancel a pending or in-flight reply
+  let opponentGen = 0;          // bumped to invalidate any scheduled/awaiting opponentMove
+  let opponentTimer = null;     // handle of the pending setTimeout(opponentMove)
+  function invalidateOpponent(){ opponentGen++; if (opponentTimer){ clearTimeout(opponentTimer); opponentTimer = null; } }
+
+  let inUserMove = false;       // (C3) re-entrancy guard — only a genuine user move runs this
   // user made a move on the board
   function onUserMove(from, to){
-    let move;
-    try { move = chess.move({ from, to, promotion:'q' }); }  // (C1) chess.js 1.4 throws on illegal
-    catch(e){ syncBoard(); return; }
-    if (!move){ syncBoard(); return; }
-    syncBoard();                                 // board updates (renderCoach early-returns: opponent's turn)
-    revealPanel();                               // reveal the top-2 for the position just moved from
-    if (chess.isGameOver()) return;
-    cg.set({ movable:{ color: window.humanColor || 'white', dests:new Map() } });
-    setTimeout(opponentMove, 350);
+    if (inUserMove) return;     // (C3) ignore any re-entrant/programmatic invocation (never a real takeback)
+    inUserMove = true;
+    try {
+      // TAKEBACK: if this move is played from a reviewed past position, rebuild chess to that ply first
+      // (discarding the moves that came after), then fall through to play the new move as the live move.
+      if (Review.active && Review.takeback) Review.takeback();
+      // snapshot the analyst's best-two for the position being moved FROM, before chess.move advances it.
+      // (M3) use the actual pre-move FEN (always valid) so a delayed reveal can key on this position even
+      // when the analyst hadn't finished yet (window.bestMovesFen would still be null in that case).
+      const preBM = (window.bestMoves || []).slice();
+      const preFen = chess.fen();
+      let move;
+      try { move = chess.move({ from, to, promotion:'q' }); }  // (C1) chess.js 1.4 throws on illegal
+      catch(e){ syncBoard(); return; }
+      if (!move){ syncBoard(); return; }
+      syncBoard();                                 // board updates (renderCoach early-returns: opponent's turn)
+      revealPanel(preBM, preFen);                  // reveal that position's best-two — and keep it up all turn
+      if (chess.isGameOver()) return;
+      cg.set({ movable:{ color: window.humanColor || 'white', dests:new Map() } });
+      const gen = opponentGen;                     // (C2) tag this reply so a takeback / new game can cancel it
+      opponentTimer = setTimeout(()=>opponentMove(gen), 350);
+    } finally { inUserMove = false; }
   }
 
   // ===== OPPONENT: Stockfish (falls back to random only if the engine failed to load) =====
-  async function opponentMove(){
+  async function opponentMove(myGen){
+    if (myGen === undefined) myGen = opponentGen;   // direct calls (e.g. engine plays White's first move)
+    opponentTimer = null;
+    if (myGen !== opponentGen) return;              // (C2) superseded by a new game / takeback
     if (chess.isGameOver()) { syncBoard(); return; }
+    if (chess.turn() === humanChar()) return;       // (C2) not the engine's turn -> never move for the human
 
     // wait briefly for the engine to finish its UCI handshake on the very first move
     if (!engineReady && !engineDead){
@@ -634,25 +717,27 @@
         await new Promise(r=>setTimeout(r,150));
       }
     }
+    if (myGen !== opponentGen) return;              // (C2) re-check after the handshake wait
 
     let uci = null;
     if (engineReady && !engineDead){
       try { uci = await bestMove(chess.fen()); } catch(e){ uci = null; }
     }
+    if (myGen !== opponentGen) return;              // (C2) re-check after the search (takeback / new game)
+    if (chess.turn() === humanChar()) return;       // (C2) turn changed under us -> abort
 
     if (uci && uci !== '(none)'){
       const from = uci.slice(0,2), to = uci.slice(2,4);
       const promotion = uci.length > 4 ? uci[4] : 'q';
       try { chess.move({ from, to, promotion }); }            // (C1) ignore a stale/illegal engine move
       catch(e){ console.warn('Ignored stale/illegal engine move:', uci, e); syncBoard(); return; }
-      cg.move(from, to);
-      syncBoard();
+      syncBoard();                                  // (C1) render via cg.set({fen}) — NOT cg.move (no events.move re-entry)
     } else {
       // fallback: random legal move (engine unavailable)
       const moves = chess.moves({ verbose:true });
       if (moves.length === 0){ syncBoard(); return; }
       const m = moves[Math.floor(Math.random()*moves.length)];
-      chess.move(m.san); cg.move(m.from, m.to); syncBoard();
+      chess.move(m.san); syncBoard();               // (C1) no cg.move
       if (engineDead) flagFallback();
     }
   }
@@ -677,19 +762,13 @@
   });
 
   document.getElementById('newBtn').addEventListener('click', ()=>{
-    invalidateEngine(); invalidateAnalyst();   // (C1/M1) drop any in-flight search so it can't apply to the new game
+    invalidateEngine(); invalidateAnalyst(); invalidateOpponent();   // drop any in-flight/scheduled reply
+    revealActive = false; revealWaitingFen = null;  // new game: panel returns to the "Find the best move" prompt
     chess.reset();
     if (engine && !engineDead){ engine.postMessage('ucinewgame'); engine.postMessage('isready'); } // (2)
     cg.set({ fen: chess.fen(), lastMove:undefined, check:false,
              turnColor:'white', movable:{ color:'white', dests:computeDests() } });
     updateStatus();
-  });
-
-  document.getElementById('undoBtn').addEventListener('click', ()=>{
-    chess.undo(); // undo opponent
-    chess.undo(); // undo your move
-    syncBoard();
-    cg.set({ lastMove:undefined });
   });
 
   updateStatus();
@@ -703,12 +782,11 @@
     }
   });
 
-  /* ===================== VISUAL LAYER (presentation only — no game/coach logic) =====================
-     This block ONLY reads chess.board()/chess.turn() and currentElo to paint the strips, and ADDS
-     listeners. It does not alter any engine/analyst/UCI handling, the COACH_CATEGORIES registry,
-     truth()/heat(), pickTwo(), challenge detection, move handling, or chess.js wiring. updateStatus()
-     is wrapped additively (original runs first, unchanged) so the captured-piece rows and the
-     side-to-move clock refresh on every position change. */
+  /* ===================== VISUAL LAYER (presentation only — no game/engine logic) =====================
+     This block ONLY reads chess.board()/chess.turn() and currentElo to paint the player strips, and
+     ADDS listeners. It does not touch the engine/analyst workers, the move/analysis/review logic, or
+     chess.js wiring. updateStatus() is wrapped additively (original runs first, unchanged) so the
+     captured-piece rows and the side-to-move clock refresh on every position change. */
   (function(){
     const GLYPH = { w:{p:'♙',n:'♘',b:'♗',r:'♖',q:'♕'},
                     b:{p:'♟',n:'♞',b:'♝',r:'♜',q:'♛'} };
@@ -770,12 +848,6 @@
       } catch(e){ /* ignore */ }
     });
 
-    // toolbar buttons that are intentionally inert for now (present, but must not throw)
-    ['backBtn','fwdBtn'].forEach(id=>{
-      const el = document.getElementById(id);
-      if (el) el.addEventListener('click', (e)=>{ e.preventDefault(); /* no-op for now */ });
-    });
-
     // Analyze: open the standalone analysis board in the same tab
     const analyzeBtn = document.getElementById('analyzeBtn');
     if (analyzeBtn) analyzeBtn.addEventListener('click', ()=>{ window.location.href = 'analysis_board.html'; });
@@ -788,7 +860,7 @@
      (not duplicated) by the Play button. For "Black", board orientation + which side the human drags is
      handled by ADDITIVELY wrapping syncBoard (original runs first, unchanged) and by firing the existing
      opponentMove() so the engine plays White's first move. This block does NOT touch the engine/analyst
-     workers, COACH_CATEGORIES, truth()/heat(), pickTwo(), challenge detection, or chess.js move handling. */
+     workers, the analysis/review logic, or chess.js move handling. */
   (function(){
     // session-only prefs (no localStorage yet — that's the packaging step)
     window.gamePrefs  = window.gamePrefs || { color:'random', time:'unlimited' };
@@ -885,14 +957,14 @@
     });
   })();
 
-  /* ===================== REVIEW LAYER (Back / Forward history browser — display only) =====================
-     Steps the chessground DISPLAY through past positions without ever calling chess.undo() or mutating the
-     real game. The chess instance stays at the live position the whole time; dragging is only possible when
-     live (the board is viewOnly while reviewing). syncBoard is reused to snap back to live. This block does
-     NOT touch the engine/analyst workers, COACH_CATEGORIES, truth()/heat(), pickTwo(), challenge detection,
-     or the core onUserMove/opponentMove move-making. */
+  /* ===================== REVIEW LAYER (Back / Forward history browser + takeback) =====================
+     Back/Forward step the board through past positions (showing each position's best move via the analyst).
+     From a past position that's the human's turn, the pieces stay movable: playing a move there is a TAKEBACK
+     — Review.takeback() rebuilds chess.js to that ply (chess.undo) and the core onUserMove plays the new move,
+     after which the engine replies and play continues live. syncBoard snaps back to live on any real move. */
   (function(){
     let reviewIdx = null;   // null = at live; otherwise an index into the FEN timeline (0 = start position)
+    let savedPanel = null, savedBM = null, savedFen = null;   // live-reveal snapshot, restored on leaving review
 
     const reviewBar = document.getElementById('reviewBar');
     const reviewMsg = document.getElementById('reviewMsg');
@@ -902,13 +974,27 @@
 
     const isReviewing = ()=> reviewIdx !== null;
 
-    // Build the FEN timeline additively by replaying the real game's SAN history from the standard start.
-    // (The game always begins from the initial position; reset() returns to it.) Never mutates `chess`.
+    // Build the FEN timeline by replaying the real game's SAN history from the standard start.
     function timeline(){
       const tmp = new Chess();
       const fens = [tmp.fen()];
       for (const san of chess.history()){ tmp.move(san); fens.push(tmp.fen()); }
       return fens;
+    }
+    // legal-move dests Map for an arbitrary Chess instance (the reviewed position)
+    function destsFor(c){
+      const dests = new Map();
+      for (const m of c.moves({ verbose:true })){
+        if (!dests.has(m.from)) dests.set(m.from, []);
+        dests.get(m.from).push(m.to);
+      }
+      return dests;
+    }
+    // restore the live reveal the panel was showing before we entered review
+    function restoreLivePanel(){
+      if (savedPanel == null) return;
+      coachEl.innerHTML = savedPanel; window.bestMoves = savedBM; window.bestMovesFen = savedFen;
+      savedPanel = null;
     }
 
     function updateNavButtons(){
@@ -926,42 +1012,69 @@
       if (reviewIdx < 0) reviewIdx = 0;
       const fen = fens[reviewIdx];
       const tmp = new Chess(fen);
+      const humanTurn = (tmp.turn() === humanChar());   // can the human take back / play from here?
       let lastMove;
       if (reviewIdx >= 1){
         const vh = chess.history({ verbose:true })[reviewIdx-1];
         if (vh) lastMove = [vh.from, vh.to];
       }
+      // pieces are MOVABLE from a past position when it's the human's turn there; frozen otherwise
       cg.set({
         fen,
-        viewOnly: true,                      // display-only: no dragging or selecting
+        viewOnly: false,
         turnColor: tmp.turn()==='w' ? 'white' : 'black',
         check: tmp.isCheck(),
-        lastMove
+        lastMove,
+        movable: { color: window.humanColor || 'white', dests: humanTurn ? destsFor(tmp) : new Map() }
       });
+      resetHint();                            // clear any stale hint ring/step from the previous ply
       document.body.classList.add('reviewing');
+      Review.active = true; Review.humanTurn = humanTurn;
       reviewBar.hidden = false;
-      reviewMsg.textContent = reviewIdx === 0
-        ? 'Reviewing — start position (0 / ' + live + ')'
-        : 'Reviewing — move ' + reviewIdx + ' / ' + live;
+      reviewMsg.textContent = 'Reviewing — ' + reviewIdx + ' / ' + live;
+      showReviewAnalysis(fen);                // panel shows the best move(s) to play FROM this position
       updateNavButtons();
     }
 
     function exitReview(){
       if (!isReviewing()) return;
       reviewIdx = null;
+      Review.active = false; Review.humanTurn = false;
+      reviewAnaGen++;                          // drop any pending reviewed-position analysis
       document.body.classList.remove('reviewing');
       reviewBar.hidden = true;
-      cg.set({ viewOnly: false });           // re-enable interaction
-      syncBoard();                            // restore live fen + movable (+ Black wrap) + coach cards
+      cg.set({ viewOnly: false });
+      syncBoard();                             // restore live board + movable + (re)analysis
+      restoreLivePanel();                      // bring back the live reveal that was showing pre-review
+      resetHint();
       updateNavButtons();
     }
+
+    // TAKEBACK: rebuild the real game to the reviewed ply (discarding the moves after it). Called by the
+    // core onUserMove the instant the human plays from a past position; onUserMove then makes the new move.
+    Review.takeback = function(){
+      const target = reviewIdx;                // FEN-timeline index == number of plies to keep
+      if (target == null) return;
+      invalidateOpponent();                    // (C2) cancel the pending engine reply to the old (discarded) line
+      const histLen = chess.history().length;
+      for (let i = histLen; i > target; i--) chess.undo();   // pop the discarded line off the real game
+      reviewIdx = null;
+      Review.active = false; Review.humanTurn = false;
+      reviewAnaGen++;                          // invalidate reviewed-position analysis
+      savedPanel = null;                       // the old live line is gone — don't restore it
+      document.body.classList.remove('reviewing');
+      reviewBar.hidden = true;
+      cg.set({ viewOnly: false });
+    };
 
     function goBack(){
       if (backBtn && backBtn.disabled) return;
       const histLen = chess.history().length;
       if (!isReviewing()){
-        if (histLen === 0) return;           // at the very start: nothing earlier
-        reviewIdx = histLen - 1;             // from live, step one move earlier
+        if (histLen === 0) return;             // at the very start: nothing earlier
+        savedPanel = coachEl.innerHTML;        // snapshot the live reveal so we can restore it on exit
+        savedBM = window.bestMoves; savedFen = window.bestMovesFen;
+        reviewIdx = histLen - 1;               // from live, step one move earlier
       } else {
         if (reviewIdx <= 0) return;
         reviewIdx -= 1;
@@ -970,9 +1083,9 @@
     }
 
     function goForward(){
-      if (!isReviewing()) return;            // already live -> no-op
+      if (!isReviewing()) return;             // already live -> no-op
       reviewIdx += 1;
-      if (reviewIdx >= chess.history().length){ exitReview(); return; }  // stepped onto live
+      if (reviewIdx >= chess.history().length){ exitReview(); return; }  // stepped onto live (no truncation)
       renderReview();
     }
 
@@ -980,16 +1093,19 @@
     if (fwdBtn)  fwdBtn.addEventListener('click', goForward);
     if (liveBtn) liveBtn.addEventListener('click', exitReview);
 
-    // Snap to live whenever a real move updates the board (user or engine). syncBoard runs for every
-    // actual position change and never during review stepping, so this never fires mid-browse.
+    // Snap to live whenever a real move updates the board (engine reply, or a takeback move). syncBoard runs
+    // for every actual position change; clear review state so we don't stay parked in the past.
     const _prevSyncBoard = syncBoard;
     syncBoard = function(){
       _prevSyncBoard.apply(this, arguments);   // sets the live board + movable + coach
-      if (isReviewing()){                       // a new move arrived while reviewing -> snap to live
+      if (isReviewing()){                       // a real move arrived while reviewing -> snap to live
         reviewIdx = null;
+        Review.active = false; Review.humanTurn = false;
+        reviewAnaGen++;
         document.body.classList.remove('reviewing');
         reviewBar.hidden = true;
         cg.set({ viewOnly: false });
+        restoreLivePanel();                     // keep the human's last live reveal visible (it persists)
       }
       updateNavButtons();
     };
@@ -997,6 +1113,8 @@
     // New Game resets via the hidden #newBtn (which doesn't call syncBoard): clear any review state too.
     document.getElementById('newBtn').addEventListener('click', ()=>{
       reviewIdx = null;
+      Review.active = false; Review.humanTurn = false;
+      savedPanel = null; reviewAnaGen++;
       document.body.classList.remove('reviewing');
       reviewBar.hidden = true;
       cg.set({ viewOnly: false });
@@ -1020,15 +1138,9 @@
     function hideHintMsg(){ if (hintMsg){ hintMsg.textContent = ''; hintMsg.hidden = true; } }
     function clearHintShapes(){ try { cg.setAutoShapes([]); } catch(e){} }
 
-    // is it the human's live turn (not reviewing, not over)?
-    function liveHumanTurn(){
-      return !document.body.classList.contains('reviewing')
-          && !chess.isGameOver()
-          && chess.turn() === humanChar();
-    }
-
     if (hintBtn) hintBtn.addEventListener('click', ()=>{
-      if (!liveHumanTurn()) return;
+      // works live AND on a reviewed past position that's the human's to move (press 2 there = takeback)
+      if (!canMoveNow()) return;
       const bm = window.bestMoves;
       if (!bm || !bm.length){ showHintMsg('Analyzing…'); return; }   // analyst not ready: wait, don't advance
       const uci = bm[0].uci;
@@ -1040,17 +1152,18 @@
         showHintMsg('There’s your move — press Hint again to play it.');
       } else {                                                                   // press 2: play the best move
         clearHintShapes(); hideHintMsg();
-        onUserMove(from, to);  // run the real move path (syncBoard animates; engine replies; panel reveals top 2)
+        onUserMove(from, to);  // real move path: takeback if reviewing, then engine replies + panel reveals
       }
     });
+
+    // expose hint reset so review navigation / takeback can clear the 2-press state and ring
+    resetHint = function(){ hintStep = 0; hideHintMsg(); clearHintShapes(); };
 
     // reset the press counter + hint annotations on every render (new turn / new game / post-move)
     const _origRenderCoach = renderCoach;
     renderCoach = function(){
       _origRenderCoach.apply(this, arguments);
-      hintStep = 0;
-      hideHintMsg();
-      clearHintShapes();
+      resetHint();
     };
   })();
 
