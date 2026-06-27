@@ -124,9 +124,11 @@
   .findbar .fb-row.cmp.amber .fb-mv,.findbar .fb-row.cmp.amber .fb-sc{color:var(--gold);}
   .findbar .fb-row.cmp.red .fb-mv,.findbar .fb-row.cmp.red .fb-sc{color:var(--red);}
   .findbar .fb-row.cmp.dim .fb-mv,.findbar .fb-row.cmp.dim .fb-sc{color:var(--ink-dim);}
-  /* engine attribution caption — subtle single line at the bottom of the reveal panel (no bulk) */
-  .findbar .fb-attr{margin-top:2px;font-size:9px;line-height:1.2;letter-spacing:.2px;
+  /* pre-first-move intro: engine attribution (line 1, tiny/dim) + a chess tip (line 2, a touch bigger) */
+  .findbar.intro{flex-direction:column;align-items:stretch;gap:3px;padding:8px 13px;}
+  .findbar .fb-attr{font-size:9px;line-height:1.2;letter-spacing:.2px;
     color:var(--ink-dim);opacity:.65;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .findbar .fb-tip{font-size:12px;line-height:1.3;font-weight:600;color:var(--ink-dim);}
   /* significant-move alert — a slim gold single-row bar that OVERLAYS the reveal panel
      (absolute inset:0 over .coachwrap) while up; the panel underneath is left untouched. */
   .alertbar{position:absolute;inset:0;z-index:5;display:flex;align-items:center;justify-content:center;
@@ -179,11 +181,11 @@
   .modal h2{font-family:"Fraunces",serif;font-weight:600;font-size:20px;}
   .field{display:flex;flex-direction:column;gap:7px;}
   .field .flabel{font-size:11px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-dim);}
-  /* dim helper line above a control (e.g. the Move alerts explainer) */
-  .field .fhelp{font-size:11px;line-height:1.4;color:var(--ink-dim);}
   .seg{display:flex;gap:4px;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:3px;}
   .seg button{flex:1;background:none;border:none;color:var(--ink-dim);font-family:inherit;font-size:12px;font-weight:600;
     padding:9px 2px;border-radius:7px;cursor:pointer;transition:all .15s;}
+  /* leading symbol on a segmented option (e.g. ♔ White) — kept at text size, not oversized */
+  .seg button .seg-ico{font-size:1em;line-height:1;margin-right:4px;vertical-align:baseline;}
   .seg button.sel{background:var(--panel-hi,#273935);color:var(--ink);}
   .seg button:focus-visible{outline:2px solid var(--gold);outline-offset:1px;}
   .modal-actions{display:flex;gap:9px;margin-top:4px;}
@@ -266,9 +268,9 @@
       <div class="field">
         <div class="flabel">Play as</div>
         <div class="seg" id="segColor">
-          <button type="button" data-v="white">White</button>
-          <button type="button" data-v="random" class="sel">Random</button>
-          <button type="button" data-v="black">Black</button>
+          <button type="button" data-v="white"><span class="seg-ico">&#9812;</span>White</button>
+          <button type="button" data-v="random" class="sel"><span class="seg-ico">&#127922;</span>Random</button>
+          <button type="button" data-v="black"><span class="seg-ico">&#9818;</span>Black</button>
         </div>
       </div>
 
@@ -292,16 +294,6 @@
           <button data-elo="1200" class="sel">1200</button>
           <button data-elo="1600">1600</button>
           <button data-elo="2000">2000</button>
-        </div>
-      </div>
-
-      <div class="field">
-        <div class="fhelp">Move alerts &mdash; how strong a move must be before the app flags it.
-          Frequent catches small edges; Rare only flags game-changing moves.</div>
-        <div class="seg" id="segAlerts">
-          <button type="button" data-v="frequent">Frequent</button>
-          <button type="button" data-v="balanced" class="sel">Balanced</button>
-          <button type="button" data-v="rare">Rare</button>
         </div>
       </div>
 
@@ -499,10 +491,26 @@
   let activeChallenge = null;   // {move:uci} on a critical turn (used by the Hint button)
   window.bestMoves = [];        // [{uci, scoreCp}] White-POV, analyst's top 2 for the LIVE human position
   window.bestMovesFen = null;   // the FEN those live bestMoves were computed for (for SAN + the hint)
-  window.alertThreshold = 250;  // cp gap (best vs 2nd-best) needed to flag a "significant move"; set per New Game (Balanced default)
+  window.alertThreshold = 250;  // fixed cp gap (best vs 2nd-best) needed to flag a "significant move"
+  // Chess tips for the pre-first-move intro — one is picked at random per new game (see pickTip).
+  const CHESS_TIPS = [
+    "Control the center with your pawns and pieces.",
+    "Develop your knights and bishops before your queen.",
+    "Castle early to keep your king safe.",
+    "Don't move the same piece twice in the opening.",
+    "Connect your rooks by clearing your back rank.",
+    "Look for your opponent's threats before you move.",
+    "Knights on the rim are dim — keep them central.",
+    "Don't bring your queen out too early.",
+    "Every move should have a purpose.",
+    "When ahead in material, trade pieces, not pawns."
+  ];
+  function pickTip(){ return CHESS_TIPS[Math.floor(Math.random() * CHESS_TIPS.length)]; }
+  let currentTip = pickTip();   // re-picked on every new game (newBtn handler); shown in the intro before move 1
+
   // The reveal of a move's best-two PERSISTS through the opponent's reply and the human's next thinking
   // time — it is only replaced when the human moves again. revealActive is false only at game start (before
-  // the first human move), when the panel shows the "Find the best move" prompt instead.
+  // the first human move), when the panel shows the pre-first-move intro (attribution + tip) instead.
   let revealActive = false;     // has the human made at least one move this game (panel in reveal mode)?
   let revealWaitingFen = null;  // (M3) FEN whose analysis a delayed reveal is waiting on — keyed to the position, not the turn
   let revealGen = 0;            // bumped each human move so a late (post-move) eval renders only for the current move
@@ -535,12 +543,13 @@
     runAnalysis(chess.fen(), myTurn);             // compute this position's best-two for when the human moves
   }
 
-  // slim "Find the best move" panel — the panel no longer changes its own appearance (the old
-  // "critical position" gold/"!" highlight was removed; significance is shown by the alert overlay instead)
+  // Pre-first-move intro panel: line 1 = engine attribution (depth tracks ANALYST_DEPTH), line 2 = a
+  // random chess tip. Shown only before the human's first move; replaced by the Best/You comparison after.
   function buildPromptPanel(){
     coachEl.innerHTML =
-      '<div class="findbar">' +
-        '<span class="fb-text">Find the best move</span>' +
+      '<div class="findbar intro">' +
+        '<div class="fb-attr">Best move computed by Stockfish 18 lite · depth ' + ANALYST_DEPTH + ' · ~2600</div>' +
+        '<div class="fb-tip">💡 ' + currentTip + '</div>' +
       '</div>';
   }
 
@@ -564,10 +573,6 @@
       return m ? m.san : uci;
     } catch(e){ return uci; }
   }
-  // engine attribution caption shown at the bottom of the reveal panel (depth tracks ANALYST_DEPTH)
-  function attrRow(){
-    return '<div class="fb-attr">Stockfish 18 lite · depth ' + ANALYST_DEPTH + ' · ~2600</div>';
-  }
   // passive (non-clickable) reveal of a position's top-2 moves. bm/fen identify the position.
   // (The panel no longer styles itself for "critical" positions — that's the alert overlay's job.)
   function renderReveal(bm, fen){
@@ -581,7 +586,7 @@
         '<span class="fb-sc">' + fmtScore(m.scoreCp) + '</span>' +
       '</div>').join('');
     coachEl.innerHTML = '<div class="findbar revealed">' +
-      '<div class="fb-list">' + rows + '</div>' + attrRow() + '</div>';
+      '<div class="fb-list">' + rows + '</div></div>';
   }
 
   // ---- significant-move alert overlay (PART 3) ----
@@ -646,7 +651,7 @@
       rows = cmpRow('green', 'Best:', bestSan, bestScoreCp) +
              cmpRow(youCls, 'You:', userSan, userScoreCp);
     }
-    coachEl.innerHTML = '<div class="findbar revealed"><div class="fb-list">' + rows + '</div>' + attrRow() + '</div>';
+    coachEl.innerHTML = '<div class="findbar revealed"><div class="fb-list">' + rows + '</div></div>';
   }
 
   // Build the comparison from the pre-move analysis (bm = top-2 of the position moved FROM). The best
@@ -907,7 +912,8 @@
 
   document.getElementById('newBtn').addEventListener('click', ()=>{
     invalidateEngine(); invalidateAnalyst(); invalidateOpponent();   // drop any in-flight/scheduled reply
-    revealActive = false; revealWaitingFen = null;  // new game: panel returns to the "Find the best move" prompt
+    revealActive = false; revealWaitingFen = null;  // new game: panel returns to the pre-first-move intro
+    currentTip = pickTip();                          // fresh random tip for this game's intro
     chess.reset();
     if (engine && !engineDead){ engine.postMessage('ucinewgame'); engine.postMessage('isready'); } // (2)
     cg.set({ fen: chess.fen(), lastMove:undefined, check:false,
@@ -1007,16 +1013,12 @@
      workers, the analysis/review logic, or chess.js move handling. */
   (function(){
     // session-only prefs (no localStorage yet — that's the packaging step)
-    window.gamePrefs  = window.gamePrefs || { color:'random', time:'unlimited', alerts:'balanced' };
+    window.gamePrefs  = window.gamePrefs || { color:'random', time:'unlimited' };
     window.humanColor = 'white';
-
-    // Move-alert sensitivity -> centipawn gap threshold (best vs 2nd-best) to flag a "significant move"
-    const ALERT_CP = { frequent:150, balanced:250, rare:400 };
 
     const backdrop = document.getElementById('ngBackdrop');
     const segColor = document.getElementById('segColor');
     const segTime  = document.getElementById('segTime');
-    const segAlerts = document.getElementById('segAlerts');
 
     function bindSeg(seg, key){
       seg.querySelectorAll('button').forEach(b=>{
@@ -1027,10 +1029,10 @@
         });
       });
     }
-    bindSeg(segColor,'color'); bindSeg(segTime,'time'); bindSeg(segAlerts,'alerts');
+    bindSeg(segColor,'color'); bindSeg(segTime,'time');
 
     function selectIn(seg, val){ seg.querySelectorAll('button').forEach(x=>x.classList.toggle('sel', x.dataset.v===val)); }
-    function reflectPrefs(){ selectIn(segColor,gamePrefs.color); selectIn(segTime,gamePrefs.time); selectIn(segAlerts,gamePrefs.alerts); }
+    function reflectPrefs(){ selectIn(segColor,gamePrefs.color); selectIn(segTime,gamePrefs.time); }
 
     function openDialog(){ reflectPrefs(); backdrop.hidden = false; }
     function closeDialog(){ backdrop.hidden = true; }
@@ -1090,7 +1092,7 @@
       const choice   = gamePrefs.color;
       const resolved = choice === 'random' ? (Math.random() < 0.5 ? 'white' : 'black') : choice;
       window.humanColor = resolved;
-      window.alertThreshold = ALERT_CP[gamePrefs.alerts] || 250;   // apply the chosen move-alert sensitivity
+      window.alertThreshold = 250;   // fixed significant-move threshold (the sensitivity control was removed)
       setupClocks(gamePrefs.time);   // reset + (re)start the human clock for the new game
       closeDialog();
 
