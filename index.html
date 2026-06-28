@@ -513,7 +513,7 @@
   let activeChallenge = null;   // {move:uci} on a critical turn (used by the Hint button)
   window.bestMoves = [];        // [{uci, scoreCp}] White-POV, analyst's top 2 for the LIVE human position
   window.bestMovesFen = null;   // the FEN those live bestMoves were computed for (for SAN + the hint)
-  window.alertThreshold = 20;  // fixed cp gap (best vs 2nd-best) needed to flag a "significant move"
+  window.alertThreshold = 95;  // fixed cp gap (best vs 2nd-best) needed to flag a "significant move"
   // Chess tips for the pre-first-move intro — one is picked at random per new game (see pickTip).
   const CHESS_TIPS = [
     "Control the center with your pawns and pieces.",
@@ -625,37 +625,21 @@
   function updateAlert(){
     const el = document.getElementById('alertBar');
     if (!el) return;
-    // DIAG: compute inputs up front (guarding bm<2) and write a visible readout each call -------------
+    const hide = ()=>{ el.hidden = true; };
+    if (Review.active) return hide();                      // never while reviewing a past position
+    if (chess.isGameOver()) return hide();
+    if (chess.turn() !== humanChar()) return hide();       // only on the human's own live turn
     const bm = window.bestMoves || [];
-    const bmLen = bm.length;
-    const fenMatch = (window.bestMovesFen === chess.fen());
-    let s0, s1, gap;
-    if (bmLen >= 2){ s0 = bm[0].scoreCp; s1 = bm[1].scoreCp; gap = Math.abs(s0 - s1); }
-    const setDiag = (outcome)=>{                           // DIAG (temporary on-screen readout)
-      let d = document.getElementById('diagBar');
-      if (!d){
-        d = document.createElement('div'); d.id = 'diagBar';
-        d.style.cssText = 'position:fixed;left:0;right:0;bottom:64px;z-index:60;'+
-          'font:11px/1.3 monospace;color:#1a1408;background:#e0b15a;padding:3px 8px;text-align:center;';
-        document.body.appendChild(d);
-      }
-      d.textContent = 'DIAG s0=' + s0 + ' s1=' + s1 + ' gap=' + gap + ' thr=' + window.alertThreshold +
-        ' bm=' + bmLen + ' fenMatch=' + fenMatch + ' -> ' + outcome;
-    };
-    const hide = (outcome)=>{ el.hidden = true; setDiag(outcome); };   // DIAG: tag each hide reason
-    // ------------------------------------------------------------------------------------------------
-    if (Review.active) return hide('hid:review');          // never while reviewing a past position
-    if (chess.isGameOver()) return hide('hid:over');
-    if (chess.turn() !== humanChar()) return hide('hid:opp-turn');  // only on the human's own live turn
-    if (bmLen < 2) return hide('hid:bm<2');               // no 2nd move (single legal / mate) -> nothing to compare
-    if (!fenMatch) return hide('hid:fen');                // analysis must be for the CURRENT live position
-    if (Math.abs(s0) > MATE_VAL - 1000 || Math.abs(s1) > MATE_VAL - 1000) return hide('hid:mate');  // mate-scored: skip
-    if (gap < (window.alertThreshold || 250)) return hide('hid:gap<thr');
+    if (bm.length < 2) return hide();                      // no 2nd move (single legal / mate) -> nothing to compare
+    if (window.bestMovesFen !== chess.fen()) return hide();// analysis must be for the CURRENT live position
+    const s0 = bm[0].scoreCp, s1 = bm[1].scoreCp;
+    if (Math.abs(s0) > MATE_VAL - 1000 || Math.abs(s1) > MATE_VAL - 1000) return hide();  // mate-scored: skip
+    const gap = Math.abs(s0 - s1);                         // side-to-move eval gap (colour-agnostic magnitude)
+    if (gap < (window.alertThreshold || 250)) return hide();
     const pawns = (gap / 100).toFixed(1);                  // e.g. 230cp -> "2.3"
     el.querySelector('.al-text').textContent =
       '⚡ Significant move available — it’s ' + pawns + ' better than the next best. Find it!';
     el.hidden = false;
-    setDiag('SHOWN');                                      // DIAG
   }
   // ---- Best-vs-You comparison panel (shown after the human moves, persists until they move again) ----
   // Two slim lines: the single BEST move (from the pre-move analysis) and the move the USER actually
@@ -1133,7 +1117,7 @@
       const choice   = gamePrefs.color;
       const resolved = choice === 'random' ? (Math.random() < 0.5 ? 'white' : 'black') : choice;
       window.humanColor = resolved;
-      window.alertThreshold = 20;   // fixed significant-move threshold (the sensitivity control was removed)
+      window.alertThreshold = 95;   // fixed significant-move threshold (the sensitivity control was removed)
       setupClocks(gamePrefs.time);   // reset + (re)start the human clock for the new game
       closeDialog();
 
