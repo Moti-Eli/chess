@@ -239,7 +239,7 @@
   <div class="pstrip" id="youStrip">
     <div class="avatar you">&#9817;</div>
     <div class="pinfo">
-      <div class="pname">You</div>
+      <div class="pname">You <span class="prating" id="youCounters">&#10003; 0 &#128161; 0</span></div>
       <div class="captured" id="capByWhite"></div>
     </div>
     <div class="clock" id="clockYou">5:00</div>
@@ -319,6 +319,7 @@
     <div class="modal gameover" role="dialog" aria-modal="true" aria-labelledby="goTitle">
       <h2 class="go-title" id="goTitle">Game over</h2>
       <div class="go-sub" id="goSub"></div>
+      <div class="go-sub" id="goCounters"></div>
       <div class="modal-actions">
         <button class="btn ghost" id="goCloseBtn" type="button">Close</button>
         <button class="btn go" id="goNewBtn" type="button">New Game</button>
@@ -538,6 +539,15 @@
   let revealGen = 0;            // bumped each human move so a late (post-move) eval renders only for the current move
   let pendingReveal = null;     // {preFen, userUci, userSan, postFen, gen, ply} — context for the Best-vs-You comparison panel
 
+  // ---- session counters (presentation only; reset on New Game) ----
+  // bestMoveCount: human played the engine's top move (counted once per such live move, incl. via hint).
+  // hintCount: number of turns the Hint button was used (once per turn, regardless of 1 or 2 presses).
+  let bestMoveCount = 0, hintCount = 0;
+  function updateSessionCounters(){
+    const el = document.getElementById('youCounters');
+    if (el) el.innerHTML = '&#10003; ' + bestMoveCount + ' &#128161; ' + hintCount;
+  }
+
   // Saved per-human-move "Your best move / Your move" comparison records, in ply order. Recorded as each
   // human move is analysed (buildComparison) and REPLAYED instantly during Back/Forward review — no
   // recomputation. Each: {ply, preFen, bestUci, bestSan, bestScoreCp, userUci, userSan, userScoreCp, moverWhite}.
@@ -670,6 +680,7 @@
     if (userUci === bestUci){
       // the user played the best move -> collapse to a single green line
       rows = cmpRow('green', review ? 'You played the best move!' : 'Best move!', bestSan, bestScoreCp);
+      if (!review){ bestMoveCount++; updateSessionCounters(); }   // count best moves in the LIVE path only (not review replay)
     } else {
       let youCls = 'dim';
       if (userScoreCp != null){
@@ -938,6 +949,7 @@
     invalidateEngine(); invalidateAnalyst(); invalidateOpponent();   // drop any in-flight/scheduled reply
     revealActive = false; revealWaitingFen = null;  // new game: panel returns to the pre-first-move intro
     window.moveLog = [];                             // drop the saved per-move comparison records
+    bestMoveCount = 0; hintCount = 0; updateSessionCounters();   // reset session counters for the new game
     currentTip = pickTip();                          // fresh random tip for this game's intro
     chess.reset();
     if (engine && !engineDead){ engine.postMessage('ucinewgame'); engine.postMessage('isready'); } // (2)
@@ -1339,6 +1351,7 @@
      navigating review. */
   (function(){
     let hintStep = 0;
+    let hintCountedThisTurn = false;   // ensures hintCount rises at most once per turn (press 1 only)
     const hintBtn = document.getElementById('hintBtn');
     const hintMsg = document.getElementById('hintMsg');
 
@@ -1356,6 +1369,8 @@
       const uci = bm[0].uci;
       const from = uci.slice(0,2), to = uci.slice(2,4);
 
+      if (!hintCountedThisTurn){ hintCountedThisTurn = true; hintCount++; updateSessionCounters(); }  // first real hint this turn
+
       hintStep++;
       if (hintStep === 1){
         try { cg.setAutoShapes([ fillSquare(from) ]); } catch(e){}             // press 1: fill the from-square green
@@ -1371,7 +1386,7 @@
     });
 
     // expose hint reset so review navigation / takeback can clear the 2-press state and ring
-    resetHint = function(){ hintStep = 0; hideHintMsg(); clearHintShapes(); };
+    resetHint = function(){ hintStep = 0; hintCountedThisTurn = false; hideHintMsg(); clearHintShapes(); };
 
     // reset the press counter + hint annotations on every render (new turn / new game / post-move)
     const _origRenderCoach = renderCoach;
@@ -1410,6 +1425,10 @@
       titleEl.textContent = headline;
       titleEl.classList.toggle('win', win);
       subEl.textContent = sub;
+      const goCounters = document.getElementById('goCounters');
+      if (goCounters) goCounters.textContent =
+        bestMoveCount + ' best move' + (bestMoveCount === 1 ? '' : 's') +
+        ' · ' + hintCount + ' hint' + (hintCount === 1 ? '' : 's') + ' used';
       backdrop.hidden = false;
     }
     function hide(){ backdrop.hidden = true; }
